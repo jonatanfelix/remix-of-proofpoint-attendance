@@ -5,19 +5,13 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/layout/Header';
 import StatusCard from '@/components/attendance/StatusCard';
-import LocationStatus from '@/components/attendance/LocationStatus';
 import AttendanceButtons from '@/components/attendance/AttendanceButtons';
 import RecentHistory from '@/components/attendance/RecentHistory';
 import CameraCapture from '@/components/attendance/CameraCapture';
-import { getCurrentPosition, calculateDistance, GeolocationError } from '@/lib/geolocation';
-
-interface Location {
-  id: string;
-  name: string;
-  latitude: number;
-  longitude: number;
-  radius_meters: number;
-}
+import { getCurrentPosition, GeolocationError } from '@/lib/geolocation';
+import { Card, CardContent } from '@/components/ui/card';
+import { MapPin, RefreshCw } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface AttendanceRecord {
   id: string;
@@ -42,9 +36,6 @@ const Dashboard = () => {
     longitude: number;
     accuracy: number;
   } | null>(null);
-  const [nearestLocation, setNearestLocation] = useState<Location | null>(null);
-  const [distance, setDistance] = useState<number | null>(null);
-  const [isWithinRange, setIsWithinRange] = useState<boolean | null>(null);
 
   // Camera state
   const [showCamera, setShowCamera] = useState(false);
@@ -59,26 +50,12 @@ const Dashboard = () => {
         .from('profiles')
         .select('full_name')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (error) return null;
-      return data as ProfileData;
+      return data as ProfileData | null;
     },
     enabled: !!user?.id,
-  });
-
-  // Fetch locations
-  const { data: locations } = useQuery({
-    queryKey: ['locations'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('locations')
-        .select('*')
-        .eq('is_active', true);
-
-      if (error) throw error;
-      return data as Location[];
-    },
   });
 
   // Fetch recent attendance records
@@ -124,7 +101,7 @@ const Dashboard = () => {
   const lastClockIn = recentRecords?.find((r) => r.record_type === 'clock_in');
   const lastClockOut = recentRecords?.find((r) => r.record_type === 'clock_out');
 
-  // Refresh location
+  // Refresh location (just get GPS, no geofencing check)
   const refreshLocation = useCallback(async () => {
     setLocationLoading(true);
     setLocationError(null);
@@ -132,49 +109,18 @@ const Dashboard = () => {
     try {
       const position = await getCurrentPosition();
       setCurrentPosition(position);
-
-      if (locations && locations.length > 0) {
-        // Find nearest location
-        let nearest: Location | null = null;
-        let minDistance = Infinity;
-
-        for (const loc of locations) {
-          const dist = calculateDistance(
-            position.latitude,
-            position.longitude,
-            Number(loc.latitude),
-            Number(loc.longitude)
-          );
-          if (dist < minDistance) {
-            minDistance = dist;
-            nearest = loc;
-          }
-        }
-
-        setNearestLocation(nearest);
-        setDistance(minDistance);
-        setIsWithinRange(nearest ? minDistance <= nearest.radius_meters : false);
-      } else {
-        // No locations configured - allow clock in from anywhere for testing
-        setNearestLocation(null);
-        setDistance(0);
-        setIsWithinRange(true);
-      }
     } catch (err) {
       const error = err as GeolocationError;
       setLocationError(error.message);
-      setIsWithinRange(null);
     } finally {
       setLocationLoading(false);
     }
-  }, [locations]);
+  }, []);
 
   // Initial location fetch
   useEffect(() => {
-    if (locations !== undefined) {
-      refreshLocation();
-    }
-  }, [locations, refreshLocation]);
+    refreshLocation();
+  }, [refreshLocation]);
 
   // Upload photo to storage
   const uploadPhoto = async (imageDataUrl: string, recordType: 'clock_in' | 'clock_out'): Promise<string | null> => {
@@ -214,12 +160,16 @@ const Dashboard = () => {
   const attendanceMutation = useMutation({
     mutationFn: async ({ recordType, photoUrl }: { recordType: 'clock_in' | 'clock_out'; photoUrl: string | null }) => {
       if (!user?.id || !currentPosition) {
-        throw new Error('Missing required data');
+        throw new Error('Lokasi belum tersedia. Silakan refresh lokasi.');
+      }
+
+      if (!photoUrl) {
+        throw new Error('Foto wajib diambil untuk absensi.');
       }
 
       const { error } = await supabase.from('attendance_records').insert({
         user_id: user.id,
-        location_id: nearestLocation?.id || null,
+        location_id: null,
         record_type: recordType,
         latitude: currentPosition.latitude,
         longitude: currentPosition.longitude,
@@ -233,25 +183,41 @@ const Dashboard = () => {
     onSuccess: (_, { recordType }) => {
       queryClient.invalidateQueries({ queryKey: ['attendance-records'] });
       toast({
-        title: recordType === 'clock_in' ? 'Clocked In!' : 'Clocked Out!',
-        description: `Successfully recorded at ${new Date().toLocaleTimeString()}`,
+        title: recordType === 'clock_in' ? 'Berhasil Clock In!' : 'Berhasil Clock Out!',
+        description: `Tercatat pada ${new Date().toLocaleTimeString()}`,
       });
     },
     onError: (error) => {
       toast({
         title: 'Error',
-        description: error.message || 'Failed to record attendance',
+        description: error.message || 'Gagal mencatat absensi',
         variant: 'destructive',
       });
     },
   });
 
   const handleClockIn = () => {
+    if (!currentPosition) {
+      toast({
+        title: 'Lokasi Diperlukan',
+        description: 'Silakan tunggu atau refresh lokasi terlebih dahulu.',
+        variant: 'destructive',
+      });
+      return;
+    }
     setPendingRecordType('clock_in');
     setShowCamera(true);
   };
 
   const handleClockOut = () => {
+    if (!currentPosition) {
+      toast({
+        title: 'Lokasi Diperlukan',
+        description: 'Silakan tunggu atau refresh lokasi terlebih dahulu.',
+        variant: 'destructive',
+      });
+      return;
+    }
     setPendingRecordType('clock_out');
     setShowCamera(true);
   };
@@ -261,6 +227,17 @@ const Dashboard = () => {
 
     // Upload photo first
     const photoUrl = await uploadPhoto(imageDataUrl, pendingRecordType);
+
+    if (!photoUrl) {
+      toast({
+        title: 'Error',
+        description: 'Gagal mengupload foto. Silakan coba lagi.',
+        variant: 'destructive',
+      });
+      setShowCamera(false);
+      setPendingRecordType(null);
+      return;
+    }
 
     // Submit attendance record
     attendanceMutation.mutate({ recordType: pendingRecordType, photoUrl });
@@ -272,8 +249,9 @@ const Dashboard = () => {
     setPendingRecordType(null);
   };
 
-  const canClockIn = isWithinRange === true && status !== 'clocked_in';
-  const canClockOut = isWithinRange === true && status === 'clocked_in';
+  // No geofencing - can clock in/out from anywhere as long as we have GPS
+  const canClockIn = currentPosition !== null && status !== 'clocked_in';
+  const canClockOut = currentPosition !== null && status === 'clocked_in';
 
   return (
     <div className="min-h-screen bg-background">
@@ -288,16 +266,45 @@ const Dashboard = () => {
             lastClockOut={lastClockOut ? new Date(lastClockOut.recorded_at) : null}
           />
 
-          {/* Location Status */}
-          <LocationStatus
-            isLoading={locationLoading}
-            isWithinRange={isWithinRange}
-            distance={distance}
-            accuracy={currentPosition?.accuracy || null}
-            locationName={nearestLocation?.name || null}
-            error={locationError}
-            onRefresh={refreshLocation}
-          />
+          {/* GPS Status (simplified - no geofencing) */}
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${currentPosition ? 'bg-primary/10' : 'bg-muted'}`}>
+                    <MapPin className={`h-5 w-5 ${currentPosition ? 'text-primary' : 'text-muted-foreground'}`} />
+                  </div>
+                  <div>
+                    <p className="font-medium">
+                      {locationLoading
+                        ? 'Mendapatkan lokasi...'
+                        : locationError
+                        ? 'Lokasi Error'
+                        : currentPosition
+                        ? 'Lokasi Tersedia'
+                        : 'Lokasi Belum Tersedia'}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {locationError
+                        ? locationError
+                        : currentPosition
+                        ? `Akurasi: ${Math.round(currentPosition.accuracy)}m`
+                        : 'Klik refresh untuk mendapatkan lokasi'}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={refreshLocation}
+                  disabled={locationLoading}
+                  className="border-2 border-foreground"
+                >
+                  <RefreshCw className={`h-4 w-4 ${locationLoading ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Attendance Buttons */}
           <AttendanceButtons
@@ -316,7 +323,7 @@ const Dashboard = () => {
         </div>
       </main>
 
-      {/* Camera Capture Modal */}
+      {/* Camera Capture Modal - Required for attendance */}
       {currentPosition && (
         <CameraCapture
           isOpen={showCamera}
