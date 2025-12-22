@@ -17,10 +17,12 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Download, Search, Calendar, Users, Clock, MapPin } from 'lucide-react';
+import { Download, Search, Calendar, Users, Clock, MapPin, Image, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
+import { id as idLocale } from 'date-fns/locale';
+import * as XLSX from 'xlsx';
 
-interface AttendanceWithProfile {
+interface AttendanceRecord {
   id: string;
   record_type: string;
   recorded_at: string;
@@ -29,13 +31,25 @@ interface AttendanceWithProfile {
   accuracy_meters: number | null;
   photo_url: string | null;
   user_id: string;
+}
+
+interface AttendanceWithProfile extends AttendanceRecord {
   profiles: {
     full_name: string;
     email: string;
   } | null;
-  locations: {
-    name: string;
-  } | null;
+}
+
+interface DailyAttendance {
+  date: string;
+  name: string;
+  email: string;
+  clockInTime: string | null;
+  clockInPhoto: string | null;
+  clockInLocation: string | null;
+  clockOutTime: string | null;
+  clockOutPhoto: string | null;
+  clockOutLocation: string | null;
 }
 
 const Admin = () => {
@@ -66,13 +80,9 @@ const Admin = () => {
   const { data: records, isLoading: recordsLoading } = useQuery({
     queryKey: ['admin-attendance', searchTerm, startDate, endDate],
     queryFn: async () => {
-      // Fetch attendance records
       let query = supabase
         .from('attendance_records')
-        .select(`
-          *,
-          locations (name)
-        `)
+        .select('*')
         .order('recorded_at', { ascending: false });
 
       if (startDate) {
@@ -147,31 +157,96 @@ const Admin = () => {
     enabled: userRole === 'admin',
   });
 
-  const exportToCSV = () => {
+  // Transform records to daily format for export
+  const transformToDaily = (data: AttendanceWithProfile[]): DailyAttendance[] => {
+    const dailyMap = new Map<string, DailyAttendance>();
+
+    data.forEach((record) => {
+      const date = format(new Date(record.recorded_at), 'dd-MM-yyyy');
+      const name = record.profiles?.full_name || 'Unknown';
+      const key = `${date}-${record.user_id}`;
+
+      if (!dailyMap.has(key)) {
+        dailyMap.set(key, {
+          date,
+          name,
+          email: record.profiles?.email || '',
+          clockInTime: null,
+          clockInPhoto: null,
+          clockInLocation: null,
+          clockOutTime: null,
+          clockOutPhoto: null,
+          clockOutLocation: null,
+        });
+      }
+
+      const entry = dailyMap.get(key)!;
+      const time = format(new Date(record.recorded_at), 'HH:mm:ss');
+      const location = `${record.latitude.toFixed(6)},${record.longitude.toFixed(6)}`;
+
+      if (record.record_type === 'clock_in') {
+        entry.clockInTime = time;
+        entry.clockInPhoto = record.photo_url || '';
+        entry.clockInLocation = location;
+      } else {
+        entry.clockOutTime = time;
+        entry.clockOutPhoto = record.photo_url || '';
+        entry.clockOutLocation = location;
+      }
+    });
+
+    // Sort by date and name
+    return Array.from(dailyMap.values()).sort((a, b) => {
+      const dateCompare = b.date.localeCompare(a.date);
+      if (dateCompare !== 0) return dateCompare;
+      return a.name.localeCompare(b.name);
+    });
+  };
+
+  const exportToXLSX = () => {
     if (!records || records.length === 0) return;
 
-    const headers = ['Employee Name', 'Email', 'Type', 'Date/Time', 'Location', 'Latitude', 'Longitude', 'Accuracy'];
-    const rows = records.map((r) => [
-      r.profiles?.full_name || 'Unknown',
-      r.profiles?.email || 'Unknown',
-      r.record_type,
-      format(new Date(r.recorded_at), 'yyyy-MM-dd HH:mm:ss'),
-      r.locations?.name || 'N/A',
-      r.latitude,
-      r.longitude,
-      r.accuracy_meters || 'N/A',
-    ]);
+    const dailyData = transformToDaily(records);
 
-    const csvContent = [
-      headers.join(','),
-      ...rows.map((row) => row.map((cell) => `"${cell}"`).join(',')),
-    ].join('\n');
+    // Create worksheet data
+    const wsData = [
+      ['Tanggal', 'Nama', 'Scan Masuk', 'Bukti Foto (Masuk)', 'Bukti Lokasi (Masuk)', 'Scan Pulang', 'Bukti Foto (Pulang)', 'Bukti Lokasi (Pulang)'],
+      ...dailyData.map((row) => [
+        row.date,
+        row.name,
+        row.clockInTime || '-',
+        row.clockInPhoto || '-',
+        row.clockInLocation || '-',
+        row.clockOutTime || '-',
+        row.clockOutPhoto || '-',
+        row.clockOutLocation || '-',
+      ]),
+    ];
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `attendance_export_${format(new Date(), 'yyyy-MM-dd')}.csv`;
-    link.click();
+    // Create workbook and worksheet
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 12 }, // Tanggal
+      { wch: 20 }, // Nama
+      { wch: 12 }, // Scan Masuk
+      { wch: 50 }, // Bukti Foto (Masuk)
+      { wch: 25 }, // Bukti Lokasi (Masuk)
+      { wch: 12 }, // Scan Pulang
+      { wch: 50 }, // Bukti Foto (Pulang)
+      { wch: 25 }, // Bukti Lokasi (Pulang)
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Absensi');
+
+    // Generate filename with date range
+    const dateRange = startDate && endDate 
+      ? `${startDate}_${endDate}` 
+      : format(new Date(), 'yyyy-MM-dd');
+    
+    XLSX.writeFile(wb, `Laporan_Absensi_${dateRange}.xlsx`);
   };
 
   if (roleLoading) {
@@ -189,11 +264,11 @@ const Admin = () => {
         <main className="container mx-auto max-w-2xl px-4 py-6">
           <Card>
             <CardContent className="py-8 text-center">
-              <p className="text-destructive mb-4">Access Denied</p>
+              <p className="text-destructive mb-4">Akses Ditolak</p>
               <p className="text-muted-foreground mb-4">
-                You do not have permission to view this page.
+                Anda tidak memiliki izin untuk melihat halaman ini.
               </p>
-              <Button onClick={() => navigate('/')}>Back to Dashboard</Button>
+              <Button onClick={() => navigate('/')}>Kembali ke Dashboard</Button>
             </CardContent>
           </Card>
         </main>
@@ -201,21 +276,24 @@ const Admin = () => {
     );
   }
 
+  // Transform records for display
+  const dailyRecords = records ? transformToDaily(records) : [];
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
 
-      <main className="container mx-auto max-w-6xl px-4 py-6">
+      <main className="container mx-auto max-w-7xl px-4 py-6">
         <div className="space-y-6">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-              <p className="text-muted-foreground">Manage attendance records</p>
+              <p className="text-muted-foreground">Kelola data absensi karyawan</p>
             </div>
-            <Button onClick={exportToCSV} disabled={!records?.length}>
+            <Button onClick={exportToXLSX} disabled={!records?.length} className="border-2 border-foreground">
               <Download className="h-4 w-4 mr-2" />
-              Export CSV
+              Export XLSX
             </Button>
           </div>
 
@@ -229,7 +307,7 @@ const Admin = () => {
                   </div>
                   <div>
                     <p className="text-2xl font-bold">{stats?.totalEmployees || 0}</p>
-                    <p className="text-sm text-muted-foreground">Total Employees</p>
+                    <p className="text-sm text-muted-foreground">Total Karyawan</p>
                   </div>
                 </div>
               </CardContent>
@@ -242,7 +320,7 @@ const Admin = () => {
                   </div>
                   <div>
                     <p className="text-2xl font-bold">{stats?.todayRecords || 0}</p>
-                    <p className="text-sm text-muted-foreground">Today&apos;s Records</p>
+                    <p className="text-sm text-muted-foreground">Absensi Hari Ini</p>
                   </div>
                 </div>
               </CardContent>
@@ -255,7 +333,7 @@ const Admin = () => {
                   </div>
                   <div>
                     <p className="text-2xl font-bold">{stats?.totalLocations || 0}</p>
-                    <p className="text-sm text-muted-foreground">Active Locations</p>
+                    <p className="text-sm text-muted-foreground">Lokasi Aktif</p>
                   </div>
                 </div>
               </CardContent>
@@ -265,17 +343,17 @@ const Admin = () => {
           {/* Filters */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Filters</CardTitle>
+              <CardTitle className="text-lg">Filter</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="search">Search Employee</Label>
+                  <Label htmlFor="search">Cari Karyawan</Label>
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="search"
-                      placeholder="Name or email..."
+                      placeholder="Nama atau email..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="pl-10"
@@ -283,7 +361,7 @@ const Admin = () => {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="startDate">Start Date</Label>
+                  <Label htmlFor="startDate">Tanggal Mulai</Label>
                   <div className="relative">
                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -296,7 +374,7 @@ const Admin = () => {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="endDate">End Date</Label>
+                  <Label htmlFor="endDate">Tanggal Akhir</Label>
                   <div className="relative">
                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -315,51 +393,101 @@ const Admin = () => {
           {/* Table */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Attendance Records</CardTitle>
+              <CardTitle className="text-lg">Data Absensi</CardTitle>
             </CardHeader>
             <CardContent>
               {recordsLoading ? (
-                <p className="text-center py-8 text-muted-foreground">Loading records...</p>
-              ) : !records?.length ? (
-                <p className="text-center py-8 text-muted-foreground">No records found</p>
+                <p className="text-center py-8 text-muted-foreground">Memuat data...</p>
+              ) : !dailyRecords?.length ? (
+                <p className="text-center py-8 text-muted-foreground">Tidak ada data</p>
               ) : (
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Employee</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Date/Time</TableHead>
-                        <TableHead>Location</TableHead>
-                        <TableHead>GPS</TableHead>
+                        <TableHead>Tanggal</TableHead>
+                        <TableHead>Nama</TableHead>
+                        <TableHead>Scan Masuk</TableHead>
+                        <TableHead>Bukti Foto</TableHead>
+                        <TableHead>Lokasi Masuk</TableHead>
+                        <TableHead>Scan Pulang</TableHead>
+                        <TableHead>Bukti Foto</TableHead>
+                        <TableHead>Lokasi Pulang</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {records.map((record) => (
-                        <TableRow key={record.id}>
+                      {dailyRecords.map((record, idx) => (
+                        <TableRow key={`${record.date}-${record.name}-${idx}`}>
+                          <TableCell className="font-medium">{record.date}</TableCell>
+                          <TableCell>{record.name}</TableCell>
                           <TableCell>
-                            <div>
-                              <p className="font-medium">{record.profiles?.full_name || 'Unknown'}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {record.profiles?.email}
-                              </p>
-                            </div>
+                            {record.clockInTime ? (
+                              <Badge variant="default">{record.clockInTime}</Badge>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
                           </TableCell>
                           <TableCell>
-                            <Badge
-                              variant={record.record_type === 'clock_in' ? 'default' : 'secondary'}
-                            >
-                              {record.record_type === 'clock_in' ? 'Clock In' : 'Clock Out'}
-                            </Badge>
+                            {record.clockInPhoto ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => window.open(record.clockInPhoto!, '_blank')}
+                              >
+                                <Image className="h-4 w-4 mr-1" />
+                                Lihat
+                              </Button>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
                           </TableCell>
                           <TableCell>
-                            {format(new Date(record.recorded_at), 'MMM d, yyyy HH:mm')}
+                            {record.clockInLocation ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => window.open(`https://www.google.com/maps?q=${record.clockInLocation}`, '_blank')}
+                              >
+                                <ExternalLink className="h-4 w-4 mr-1" />
+                                Maps
+                              </Button>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
                           </TableCell>
-                          <TableCell>{record.locations?.name || 'N/A'}</TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {record.latitude.toFixed(4)}, {record.longitude.toFixed(4)}
-                            {record.accuracy_meters && (
-                              <span className="block text-xs">±{record.accuracy_meters}m</span>
+                          <TableCell>
+                            {record.clockOutTime ? (
+                              <Badge variant="secondary">{record.clockOutTime}</Badge>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {record.clockOutPhoto ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => window.open(record.clockOutPhoto!, '_blank')}
+                              >
+                                <Image className="h-4 w-4 mr-1" />
+                                Lihat
+                              </Button>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {record.clockOutLocation ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => window.open(`https://www.google.com/maps?q=${record.clockOutLocation}`, '_blank')}
+                              >
+                                <ExternalLink className="h-4 w-4 mr-1" />
+                                Maps
+                              </Button>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
                             )}
                           </TableCell>
                         </TableRow>
