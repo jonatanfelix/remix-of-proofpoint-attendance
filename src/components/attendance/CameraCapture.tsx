@@ -24,11 +24,23 @@ const CameraCapture = ({
 }: CameraCaptureProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    setIsReady(false);
+  }, []);
+
   const startCamera = useCallback(async () => {
+    // Stop existing stream first
+    stopCamera();
+    
     setIsLoading(true);
     setError(null);
 
@@ -42,37 +54,33 @@ const CameraCapture = ({
         audio: false,
       });
 
-      setStream(mediaStream);
+      streamRef.current = mediaStream;
 
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
+        // Wait for video to be ready
+        videoRef.current.onloadedmetadata = () => {
+          setIsReady(true);
+          setIsLoading(false);
+        };
       }
     } catch (err) {
       console.error('Camera error:', err);
-      setError('Unable to access camera. Please check permissions.');
-    } finally {
+      setError('Tidak dapat mengakses kamera. Silakan cek izin kamera di browser.');
       setIsLoading(false);
     }
-  }, []);
+  }, [stopCamera]);
 
-  const stopCamera = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
-      setStream(null);
-    }
-  }, [stream]);
-
+  // Start camera when modal opens
   useEffect(() => {
     if (isOpen) {
       startCamera();
-    } else {
-      stopCamera();
     }
-
+    
     return () => {
       stopCamera();
     };
-  }, [isOpen, startCamera, stopCamera]);
+  }, [isOpen]); // Only depend on isOpen
 
   const capturePhoto = useCallback(() => {
     if (!videoRef.current || !canvasRef.current) return;
@@ -84,15 +92,15 @@ const CameraCapture = ({
     if (!ctx) return;
 
     // Set canvas dimensions to match video
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
 
     // Draw video frame to canvas
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     // Add watermark
     const now = new Date();
-    const timestamp = now.toLocaleString('en-US', {
+    const timestamp = now.toLocaleString('id-ID', {
       dateStyle: 'full',
       timeStyle: 'medium',
     });
@@ -122,10 +130,10 @@ const CameraCapture = ({
 
     // Employee name
     ctx.fillStyle = '#FFFFFF';
-    ctx.fillText(`Employee: ${employeeName}`, padding, startY + lineHeight);
+    ctx.fillText(`Karyawan: ${employeeName}`, padding, startY + lineHeight);
 
     // Timestamp
-    ctx.fillText(`Time: ${timestamp}`, padding, startY + lineHeight * 2);
+    ctx.fillText(`Waktu: ${timestamp}`, padding, startY + lineHeight * 2);
 
     // GPS coordinates
     ctx.font = `${fontSize - 2}px Arial`;
@@ -142,19 +150,28 @@ const CameraCapture = ({
 
     // Get the watermarked image
     const imageDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    
+    // Stop camera before closing
+    stopCamera();
+    
     onCapture(imageDataUrl);
     onClose();
-  }, [employeeName, recordType, latitude, longitude, onCapture, onClose]);
+  }, [employeeName, recordType, latitude, longitude, onCapture, onClose, stopCamera]);
+
+  const handleClose = useCallback(() => {
+    stopCamera();
+    onClose();
+  }, [stopCamera, onClose]);
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-      <Card className="w-full max-w-lg mx-4">
+      <Card className="w-full max-w-lg mx-4 border-2 border-foreground">
         <CardContent className="p-4">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Take {recordType} Photo</h3>
-            <Button variant="ghost" size="icon" onClick={onClose}>
+            <h3 className="text-lg font-semibold">Ambil Foto {recordType}</h3>
+            <Button variant="ghost" size="icon" onClick={handleClose}>
               <X className="h-5 w-5" />
             </Button>
           </div>
@@ -162,17 +179,17 @@ const CameraCapture = ({
           {error ? (
             <div className="text-center py-8">
               <p className="text-destructive mb-4">{error}</p>
-              <Button onClick={startCamera} variant="outline">
+              <Button onClick={startCamera} variant="outline" className="border-2 border-foreground">
                 <RotateCcw className="h-4 w-4 mr-2" />
-                Retry
+                Coba Lagi
               </Button>
             </div>
           ) : (
             <>
-              <div className="relative aspect-video bg-muted rounded-lg overflow-hidden mb-4">
+              <div className="relative aspect-video bg-muted rounded-lg overflow-hidden mb-4 border-2 border-foreground">
                 {isLoading && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <p className="text-muted-foreground">Starting camera...</p>
+                  <div className="absolute inset-0 flex items-center justify-center z-10 bg-muted">
+                    <p className="text-muted-foreground">Memulai kamera...</p>
                   </div>
                 )}
                 <video
@@ -188,10 +205,10 @@ const CameraCapture = ({
                 onClick={capturePhoto}
                 className="w-full"
                 size="lg"
-                disabled={isLoading || !stream}
+                disabled={isLoading || !isReady}
               >
                 <Camera className="h-5 w-5 mr-2" />
-                Capture Photo
+                Ambil Foto
               </Button>
             </>
           )}
