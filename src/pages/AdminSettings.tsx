@@ -8,11 +8,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { MapPin, Save, Building, Clock, Target, Search, Loader2 } from 'lucide-react';
+import { MapPin, Save, Building, Clock, Target, Loader2, Navigation } from 'lucide-react';
 import { toast } from 'sonner';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import OpenLocationCode from 'open-location-code';
 
 // Fix for default marker icon
 delete (L.Icon.Default.prototype as { _getIconUrl?: () => string })._getIconUrl;
@@ -41,8 +40,7 @@ const AdminSettings = () => {
   const [longitude, setLongitude] = useState<number | null>(null);
   const [radius, setRadius] = useState(100);
   const [workStartTime, setWorkStartTime] = useState('08:00');
-  const [searchAddress, setSearchAddress] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
 
   // Map refs
   const mapRef = useRef<HTMLDivElement>(null);
@@ -149,84 +147,40 @@ const AdminSettings = () => {
     }
   };
 
-  // Search location by address/Plus Code
-  const handleSearchLocation = async () => {
-    if (!searchAddress.trim()) {
-      toast.error('Masukkan alamat atau Plus Code');
+  // Get current location using GPS
+  const handleUseMyLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error('Browser tidak mendukung GPS');
       return;
     }
 
-    setIsSearching(true);
-    try {
-      const query = searchAddress.trim();
-      
-      // Check if it's a Plus Code (e.g., "H67Q+HH Prabumulih" or "8Q7XJRG5+HW")
-      // Plus codes contain a + sign
-      if (query.includes('+')) {
-        // Try to parse as Plus Code
-        const parts = query.split(' ');
-        const plusCodePart = parts.find(p => p.includes('+'));
-        const referencePart = parts.filter(p => !p.includes('+')).join(' ');
-        
-        if (plusCodePart) {
-          try {
-            let fullCode = plusCodePart;
-            
-            // If it's a short code (less than 8 chars before +), we need reference location
-            if (plusCodePart.indexOf('+') < 8 && referencePart) {
-              // First, get coordinates of the reference location
-              const refResponse = await fetch(
-                `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(referencePart)}&limit=1`,
-                { headers: { 'User-Agent': 'AttendanceApp/1.0' } }
-              );
-              const refResults = await refResponse.json();
-              
-              if (refResults.length > 0) {
-                const refLat = parseFloat(refResults[0].lat);
-                const refLng = parseFloat(refResults[0].lon);
-                // Recover full code from short code using reference
-                fullCode = OpenLocationCode.recoverNearest(plusCodePart, refLat, refLng);
-              }
-            }
-            
-            // Decode the Plus Code
-            if (OpenLocationCode.isValid(fullCode) && OpenLocationCode.isFull(fullCode)) {
-              const decoded = OpenLocationCode.decode(fullCode);
-              handleLocationSelect(decoded.latitudeCenter, decoded.longitudeCenter);
-              toast.success(`Plus Code ditemukan: ${decoded.latitudeCenter.toFixed(6)}, ${decoded.longitudeCenter.toFixed(6)}`);
-              return;
-            }
-          } catch (plusCodeError) {
-            console.log('Plus Code parsing failed, trying address search:', plusCodeError);
-          }
+    setIsGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude: lat, longitude: lng } = position.coords;
+        handleLocationSelect(lat, lng);
+        toast.success('Lokasi berhasil didapat dari GPS!');
+        setIsGettingLocation(false);
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+        let message = 'Gagal mendapatkan lokasi.';
+        if (error.code === error.PERMISSION_DENIED) {
+          message = 'Akses lokasi ditolak. Izinkan akses lokasi di browser.';
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          message = 'Lokasi tidak tersedia. Pastikan GPS aktif.';
+        } else if (error.code === error.TIMEOUT) {
+          message = 'Timeout. Coba lagi.';
         }
+        toast.error(message);
+        setIsGettingLocation(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
       }
-
-      // Fall back to regular address search using Nominatim
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`,
-        { headers: { 'User-Agent': 'AttendanceApp/1.0' } }
-      );
-
-      const results = await response.json();
-
-      if (results.length === 0) {
-        toast.error('Lokasi tidak ditemukan. Coba alamat yang lebih spesifik atau Plus Code lengkap.');
-        return;
-      }
-
-      const { lat, lon, display_name } = results[0];
-      const parsedLat = parseFloat(lat);
-      const parsedLng = parseFloat(lon);
-
-      handleLocationSelect(parsedLat, parsedLng);
-      toast.success(`Lokasi ditemukan: ${display_name}`);
-    } catch (error) {
-      console.error('Geocoding error:', error);
-      toast.error('Gagal mencari lokasi. Coba lagi.');
-    } finally {
-      setIsSearching(false);
-    }
+    );
   };
 
   const handleSave = () => {
@@ -384,47 +338,25 @@ const AdminSettings = () => {
                 Koordinat Kantor
               </CardTitle>
               <CardDescription>
-                Cari lokasi dengan alamat atau Plus Code dari Google Maps
+                Gunakan GPS atau klik pada peta untuk menentukan lokasi kantor
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Search Address Input */}
-              <div className="space-y-2">
-                <Label htmlFor="search-address" className="flex items-center gap-2">
-                  <Search className="h-4 w-4" />
-                  Cari Lokasi
-                </Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="search-address"
-                    value={searchAddress}
-                    onChange={(e) => setSearchAddress(e.target.value)}
-                    placeholder="Contoh: H67Q+HH Prabumulih atau Jl. Sudirman No.1, Jakarta"
-                    className="border-2 border-foreground flex-1"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleSearchLocation();
-                      }
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    onClick={handleSearchLocation}
-                    disabled={isSearching}
-                    className="border-2 border-foreground"
-                  >
-                    {isSearching ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Search className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Copy Plus Code dari Google Maps (klik lokasi → copy kode seperti "H67Q+HH Prabumulih")
-                </p>
-              </div>
+              {/* Use My Location Button */}
+              <Button
+                type="button"
+                onClick={handleUseMyLocation}
+                disabled={isGettingLocation}
+                className="w-full border-2 border-foreground"
+                variant="outline"
+              >
+                {isGettingLocation ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Navigation className="h-4 w-4 mr-2" />
+                )}
+                {isGettingLocation ? 'Mendapatkan lokasi...' : 'Gunakan Lokasi Saya Saat Ini'}
+              </Button>
 
               {/* Coordinates */}
               <div className="grid grid-cols-2 gap-4">
