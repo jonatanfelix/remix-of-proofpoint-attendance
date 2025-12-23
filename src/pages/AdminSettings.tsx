@@ -193,17 +193,25 @@ const AdminSettings = () => {
     updateMutation.mutate();
   };
 
-  // Initialize map
+  // Initialize map only after company data is loaded
   useEffect(() => {
-    if (!mapRef.current || mapInstanceRef.current) return;
+    if (!mapRef.current || companyLoading) return;
 
-    const defaultCenter: [number, number] = latitude && longitude 
-      ? [latitude, longitude] 
-      : [-6.2088, 106.8456];
+    // Cleanup existing map first
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.remove();
+      mapInstanceRef.current = null;
+      markerRef.current = null;
+      circleRef.current = null;
+    }
+
+    const centerLat = company?.office_latitude ?? -6.2088;
+    const centerLng = company?.office_longitude ?? 106.8456;
+    const hasLocation = company?.office_latitude != null && company?.office_longitude != null;
 
     mapInstanceRef.current = L.map(mapRef.current, {
-      center: defaultCenter,
-      zoom: latitude && longitude ? 17 : 12,
+      center: [centerLat, centerLng],
+      zoom: hasLocation ? 17 : 12,
     });
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -216,14 +224,14 @@ const AdminSettings = () => {
       handleLocationSelect(e.latlng.lat, e.latlng.lng);
     });
 
-    // Add initial marker if location exists
-    if (latitude && longitude) {
-      markerRef.current = L.marker([latitude, longitude]).addTo(mapInstanceRef.current);
-      circleRef.current = L.circle([latitude, longitude], {
+    // Add initial marker if location exists in company data
+    if (hasLocation) {
+      markerRef.current = L.marker([centerLat, centerLng]).addTo(mapInstanceRef.current);
+      circleRef.current = L.circle([centerLat, centerLng], {
         color: '#3b82f6',
         fillColor: '#3b82f6',
         fillOpacity: 0.2,
-        radius: radius,
+        radius: company?.radius_meters ?? 100,
       }).addTo(mapInstanceRef.current);
     }
 
@@ -235,7 +243,7 @@ const AdminSettings = () => {
         circleRef.current = null;
       }
     };
-  }, []);
+  }, [company, companyLoading]);
 
   // Update circle radius when radius changes
   useEffect(() => {
