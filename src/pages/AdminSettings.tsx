@@ -12,6 +12,7 @@ import { MapPin, Save, Building, Clock, Target, Search, Loader2 } from 'lucide-r
 import { toast } from 'sonner';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import OpenLocationCode from 'open-location-code';
 
 // Fix for default marker icon
 delete (L.Icon.Default.prototype as { _getIconUrl?: () => string })._getIconUrl;
@@ -157,20 +158,60 @@ const AdminSettings = () => {
 
     setIsSearching(true);
     try {
-      // Use OpenStreetMap Nominatim API for geocoding
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchAddress)}&limit=1`,
-        {
-          headers: {
-            'User-Agent': 'AttendanceApp/1.0',
-          },
+      const query = searchAddress.trim();
+      
+      // Check if it's a Plus Code (e.g., "H67Q+HH Prabumulih" or "8Q7XJRG5+HW")
+      // Plus codes contain a + sign
+      if (query.includes('+')) {
+        // Try to parse as Plus Code
+        const parts = query.split(' ');
+        const plusCodePart = parts.find(p => p.includes('+'));
+        const referencePart = parts.filter(p => !p.includes('+')).join(' ');
+        
+        if (plusCodePart) {
+          try {
+            let fullCode = plusCodePart;
+            
+            // If it's a short code (less than 8 chars before +), we need reference location
+            if (plusCodePart.indexOf('+') < 8 && referencePart) {
+              // First, get coordinates of the reference location
+              const refResponse = await fetch(
+                `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(referencePart)}&limit=1`,
+                { headers: { 'User-Agent': 'AttendanceApp/1.0' } }
+              );
+              const refResults = await refResponse.json();
+              
+              if (refResults.length > 0) {
+                const refLat = parseFloat(refResults[0].lat);
+                const refLng = parseFloat(refResults[0].lon);
+                // Recover full code from short code using reference
+                fullCode = OpenLocationCode.recoverNearest(plusCodePart, refLat, refLng);
+              }
+            }
+            
+            // Decode the Plus Code
+            if (OpenLocationCode.isValid(fullCode) && OpenLocationCode.isFull(fullCode)) {
+              const decoded = OpenLocationCode.decode(fullCode);
+              handleLocationSelect(decoded.latitudeCenter, decoded.longitudeCenter);
+              toast.success(`Plus Code ditemukan: ${decoded.latitudeCenter.toFixed(6)}, ${decoded.longitudeCenter.toFixed(6)}`);
+              return;
+            }
+          } catch (plusCodeError) {
+            console.log('Plus Code parsing failed, trying address search:', plusCodeError);
+          }
         }
+      }
+
+      // Fall back to regular address search using Nominatim
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`,
+        { headers: { 'User-Agent': 'AttendanceApp/1.0' } }
       );
 
       const results = await response.json();
 
       if (results.length === 0) {
-        toast.error('Lokasi tidak ditemukan. Coba alamat yang lebih spesifik.');
+        toast.error('Lokasi tidak ditemukan. Coba alamat yang lebih spesifik atau Plus Code lengkap.');
         return;
       }
 
