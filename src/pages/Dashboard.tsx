@@ -26,6 +26,7 @@ interface ProfileData {
   full_name: string;
   requires_geofence: boolean;
   company_id: string | null;
+  employee_type: 'office' | 'field';
 }
 
 interface CompanySettings {
@@ -82,7 +83,7 @@ const Dashboard = () => {
       if (!user?.id) return null;
       const { data, error } = await supabase
         .from('profiles')
-        .select('full_name, requires_geofence, company_id')
+        .select('full_name, requires_geofence, company_id, employee_type')
         .eq('user_id', user.id)
         .maybeSingle();
 
@@ -431,6 +432,7 @@ const Dashboard = () => {
             isLate={isLate}
             lateMinutes={lateMinutes}
             workStartTime={company?.work_start_time}
+            employeeType={profile?.employee_type || 'office'}
           />
 
           {/* Geofence Status Banner */}

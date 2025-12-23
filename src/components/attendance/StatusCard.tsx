@@ -1,7 +1,7 @@
-import { Clock, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, AlertTriangle, Timer } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { format } from 'date-fns';
+import { format, differenceInMinutes } from 'date-fns';
 
 interface StatusCardProps {
   status: 'not_present' | 'clocked_in' | 'clocked_out';
@@ -10,6 +10,7 @@ interface StatusCardProps {
   isLate?: boolean;
   lateMinutes?: number;
   workStartTime?: string;
+  employeeType?: 'office' | 'field';
 }
 
 const StatusCard = ({ 
@@ -18,26 +19,46 @@ const StatusCard = ({
   lastClockOut,
   isLate,
   lateMinutes,
-  workStartTime 
+  workStartTime,
+  employeeType = 'office'
 }: StatusCardProps) => {
+  
+  // Calculate work hours for field employees
+  const calculateWorkHours = () => {
+    if (!lastClockIn) return null;
+    
+    const endTime = lastClockOut || new Date();
+    const totalMinutes = differenceInMinutes(endTime, lastClockIn);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    
+    return { hours, minutes, totalMinutes };
+  };
+
+  const workHours = employeeType === 'field' ? calculateWorkHours() : null;
+
   const getStatusInfo = () => {
     switch (status) {
       case 'clocked_in':
         return {
           icon: <CheckCircle className="h-8 w-8" />,
           title: 'Sedang Bekerja',
-          subtitle: lastClockIn
-            ? `Clock in jam ${format(lastClockIn, 'HH:mm')}`
-            : 'Anda sedang bertugas',
+          subtitle: employeeType === 'field' && workHours
+            ? `Sudah bekerja ${workHours.hours} jam ${workHours.minutes} menit`
+            : lastClockIn
+              ? `Clock in jam ${format(lastClockIn, 'HH:mm')}`
+              : 'Anda sedang bertugas',
           bgClass: 'bg-accent',
         };
       case 'clocked_out':
         return {
           icon: <XCircle className="h-8 w-8" />,
           title: 'Shift Selesai',
-          subtitle: lastClockOut
-            ? `Clock out jam ${format(lastClockOut, 'HH:mm')}`
-            : 'Sampai jumpa besok',
+          subtitle: employeeType === 'field' && workHours
+            ? `Total kerja: ${workHours.hours} jam ${workHours.minutes} menit`
+            : lastClockOut
+              ? `Clock out jam ${format(lastClockOut, 'HH:mm')}`
+              : 'Sampai jumpa besok',
           bgClass: 'bg-secondary',
         };
       default:
@@ -65,6 +86,12 @@ const StatusCard = ({
               <Badge variant="destructive" className="flex items-center gap-1">
                 <AlertTriangle className="h-3 w-3" />
                 Terlambat {lateMinutes} menit
+              </Badge>
+            )}
+            {employeeType === 'field' && status !== 'not_present' && workHours && (
+              <Badge variant="outline" className="flex items-center gap-1 border-primary text-primary">
+                <Timer className="h-3 w-3" />
+                {workHours.hours}j {workHours.minutes}m
               </Badge>
             )}
           </div>

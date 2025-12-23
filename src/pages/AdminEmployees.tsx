@@ -32,7 +32,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Users, Search, MapPin, MapPinOff, Edit, UserPlus, Shield, ShieldCheck, Code } from 'lucide-react';
+import { Users, Search, MapPin, MapPinOff, Edit, UserPlus, Shield, ShieldCheck, Code, Briefcase, HardHat } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
@@ -44,6 +44,7 @@ interface Profile {
   email: string;
   role: string;
   requires_geofence: boolean;
+  employee_type: 'office' | 'field';
   company_id: string | null;
   created_at: string;
 }
@@ -56,6 +57,7 @@ const AdminEmployees = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingEmployee, setEditingEmployee] = useState<Profile | null>(null);
   const [editRequiresGeofence, setEditRequiresGeofence] = useState(true);
+  const [editEmployeeType, setEditEmployeeType] = useState<'office' | 'field'>('office');
   
   // Add employee form state
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -102,10 +104,13 @@ const AdminEmployees = () => {
 
   // Update employee mutation
   const updateMutation = useMutation({
-    mutationFn: async ({ userId, requiresGeofence }: { userId: string; requiresGeofence: boolean }) => {
+    mutationFn: async ({ userId, requiresGeofence, employeeType }: { userId: string; requiresGeofence: boolean; employeeType: 'office' | 'field' }) => {
       const { error } = await supabase
         .from('profiles')
-        .update({ requires_geofence: requiresGeofence })
+        .update({ 
+          requires_geofence: requiresGeofence,
+          employee_type: employeeType
+        })
         .eq('user_id', userId);
       
       if (error) throw error;
@@ -123,6 +128,7 @@ const AdminEmployees = () => {
   const handleEditClick = (employee: Profile) => {
     setEditingEmployee(employee);
     setEditRequiresGeofence(employee.requires_geofence);
+    setEditEmployeeType(employee.employee_type || 'office');
   };
 
   const handleSaveEdit = () => {
@@ -130,6 +136,7 @@ const AdminEmployees = () => {
     updateMutation.mutate({
       userId: editingEmployee.user_id,
       requiresGeofence: editRequiresGeofence,
+      employeeType: editEmployeeType,
     });
   };
 
@@ -333,6 +340,7 @@ const AdminEmployees = () => {
                     <TableHead>Nama</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Role</TableHead>
+                    <TableHead>Tipe</TableHead>
                     <TableHead>Geofence</TableHead>
                     <TableHead>Terdaftar</TableHead>
                     <TableHead className="text-right">Aksi</TableHead>
@@ -341,7 +349,7 @@ const AdminEmployees = () => {
                 <TableBody>
                   {filteredEmployees?.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                         Tidak ada user ditemukan
                       </TableCell>
                     </TableRow>
@@ -351,6 +359,19 @@ const AdminEmployees = () => {
                         <TableCell className="font-medium">{employee.full_name}</TableCell>
                         <TableCell className="text-muted-foreground">{employee.email}</TableCell>
                         <TableCell>{getRoleBadge(employee.role)}</TableCell>
+                        <TableCell>
+                          {employee.employee_type === 'field' ? (
+                            <Badge variant="outline" className="border-orange-500 text-orange-600">
+                              <HardHat className="h-3 w-3 mr-1" />
+                              Lapangan
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="border-blue-500 text-blue-600">
+                              <Briefcase className="h-3 w-3 mr-1" />
+                              Kantoran
+                            </Badge>
+                          )}
+                        </TableCell>
                         <TableCell>
                           {employee.requires_geofence ? (
                             <Badge variant="outline" className="border-primary text-primary">
@@ -406,6 +427,34 @@ const AdminEmployees = () => {
             <div className="space-y-2">
               <Label>Email</Label>
               <Input value={editingEmployee?.email || ''} disabled className="bg-muted" />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Tipe Karyawan</Label>
+              <Select value={editEmployeeType} onValueChange={(v) => setEditEmployeeType(v as 'office' | 'field')}>
+                <SelectTrigger className="border-2 border-foreground">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="office">
+                    <div className="flex items-center gap-2">
+                      <Briefcase className="h-4 w-4" />
+                      Kantoran - Tampilkan jam masuk & pulang
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="field">
+                    <div className="flex items-center gap-2">
+                      <HardHat className="h-4 w-4" />
+                      Lapangan - Hitung total jam kerja
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {editEmployeeType === 'field' 
+                  ? 'Karyawan lapangan: Total jam kerja dihitung dari clock-in sampai clock-out'
+                  : 'Karyawan kantoran: Hanya tampilkan jam masuk dan jam pulang'}
+              </p>
             </div>
 
             <div className="flex items-center justify-between rounded-lg border-2 border-foreground p-4">

@@ -138,6 +138,7 @@ export type Database = {
           company_id: string | null
           created_at: string
           email: string
+          employee_type: Database["public"]["Enums"]["employee_type"]
           full_name: string
           id: string
           requires_geofence: boolean
@@ -149,6 +150,7 @@ export type Database = {
           company_id?: string | null
           created_at?: string
           email: string
+          employee_type?: Database["public"]["Enums"]["employee_type"]
           full_name: string
           id?: string
           requires_geofence?: boolean
@@ -160,6 +162,7 @@ export type Database = {
           company_id?: string | null
           created_at?: string
           email?: string
+          employee_type?: Database["public"]["Enums"]["employee_type"]
           full_name?: string
           id?: string
           requires_geofence?: boolean
@@ -219,6 +222,7 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "employee" | "developer"
+      employee_type: "office" | "field"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -347,6 +351,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "employee", "developer"],
+      employee_type: ["office", "field"],
     },
   },
 } as const
