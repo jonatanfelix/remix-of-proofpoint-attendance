@@ -20,7 +20,8 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { email, redirectTo }: ResetPasswordRequest = await req.json();
+    const { email: rawEmail, redirectTo }: ResetPasswordRequest = await req.json();
+    const email = rawEmail.toLowerCase().trim();
     console.log("Processing reset password for email:", email);
 
     if (!email) {
