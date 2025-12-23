@@ -302,20 +302,19 @@ const AdminSettings = () => {
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
                 <MapClickHandler onLocationSelect={handleLocationSelect} />
-                
-                {latitude && longitude && (
-                  <>
-                    <Marker position={[latitude, longitude]} />
-                    <Circle
-                      center={[latitude, longitude]}
-                      radius={radius}
-                      pathOptions={{
-                        color: 'hsl(var(--primary))',
-                        fillColor: 'hsl(var(--primary))',
-                        fillOpacity: 0.2,
-                      }}
-                    />
-                  </>
+                {latitude !== null && longitude !== null && (
+                  <Marker position={[latitude, longitude]} />
+                )}
+                {latitude !== null && longitude !== null && (
+                  <Circle
+                    center={[latitude, longitude]}
+                    radius={radius}
+                    pathOptions={{
+                      color: 'hsl(var(--primary))',
+                      fillColor: 'hsl(var(--primary))',
+                      fillOpacity: 0.2,
+                    }}
+                  />
                 )}
               </MapContainer>
             </div>
