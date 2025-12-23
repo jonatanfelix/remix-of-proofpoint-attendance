@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { MapPin, Save, Building, Clock, Target } from 'lucide-react';
+import { MapPin, Save, Building, Clock, Target, Search, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -40,6 +40,8 @@ const AdminSettings = () => {
   const [longitude, setLongitude] = useState<number | null>(null);
   const [radius, setRadius] = useState(100);
   const [workStartTime, setWorkStartTime] = useState('08:00');
+  const [searchAddress, setSearchAddress] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
 
   // Map refs
   const mapRef = useRef<HTMLDivElement>(null);
@@ -143,6 +145,46 @@ const AdminSettings = () => {
       }
 
       mapInstanceRef.current.setView([lat, lng], 17);
+    }
+  };
+
+  // Search location by address/Plus Code
+  const handleSearchLocation = async () => {
+    if (!searchAddress.trim()) {
+      toast.error('Masukkan alamat atau Plus Code');
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      // Use OpenStreetMap Nominatim API for geocoding
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchAddress)}&limit=1`,
+        {
+          headers: {
+            'User-Agent': 'AttendanceApp/1.0',
+          },
+        }
+      );
+
+      const results = await response.json();
+
+      if (results.length === 0) {
+        toast.error('Lokasi tidak ditemukan. Coba alamat yang lebih spesifik.');
+        return;
+      }
+
+      const { lat, lon, display_name } = results[0];
+      const parsedLat = parseFloat(lat);
+      const parsedLng = parseFloat(lon);
+
+      handleLocationSelect(parsedLat, parsedLng);
+      toast.success(`Lokasi ditemukan: ${display_name}`);
+    } catch (error) {
+      console.error('Geocoding error:', error);
+      toast.error('Gagal mencari lokasi. Coba lagi.');
+    } finally {
+      setIsSearching(false);
     }
   };
 
@@ -301,10 +343,49 @@ const AdminSettings = () => {
                 Koordinat Kantor
               </CardTitle>
               <CardDescription>
-                Klik pada peta untuk menentukan lokasi kantor
+                Cari lokasi dengan alamat atau Plus Code dari Google Maps
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Search Address Input */}
+              <div className="space-y-2">
+                <Label htmlFor="search-address" className="flex items-center gap-2">
+                  <Search className="h-4 w-4" />
+                  Cari Lokasi
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="search-address"
+                    value={searchAddress}
+                    onChange={(e) => setSearchAddress(e.target.value)}
+                    placeholder="Contoh: H67Q+HH Prabumulih atau Jl. Sudirman No.1, Jakarta"
+                    className="border-2 border-foreground flex-1"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSearchLocation();
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleSearchLocation}
+                    disabled={isSearching}
+                    className="border-2 border-foreground"
+                  >
+                    {isSearching ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Search className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Copy Plus Code dari Google Maps (klik lokasi → copy kode seperti "H67Q+HH Prabumulih")
+                </p>
+              </div>
+
+              {/* Coordinates */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Latitude</Label>
@@ -335,7 +416,7 @@ const AdminSettings = () => {
               {!latitude || !longitude ? (
                 <div className="p-3 rounded-lg bg-destructive/10 border-2 border-destructive">
                   <p className="text-sm font-medium text-destructive">
-                    ⚠ Klik peta untuk menentukan lokasi kantor
+                    ⚠ Cari alamat atau klik peta untuk menentukan lokasi
                   </p>
                 </div>
               ) : null}
