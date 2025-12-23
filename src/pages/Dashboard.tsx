@@ -148,8 +148,62 @@ const Dashboard = () => {
 
   const status = getAttendanceStatus();
 
+  // Get today's clock in record specifically
+  const getTodayClockIn = useCallback(() => {
+    if (!recentRecords) return null;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    return recentRecords.find((r) => {
+      const recordDate = new Date(r.recorded_at);
+      recordDate.setHours(0, 0, 0, 0);
+      return recordDate.getTime() === today.getTime() && r.record_type === 'clock_in';
+    });
+  }, [recentRecords]);
+
+  const todayClockIn = getTodayClockIn();
   const lastClockIn = recentRecords?.find((r) => r.record_type === 'clock_in');
   const lastClockOut = recentRecords?.find((r) => r.record_type === 'clock_out');
+
+  // Calculate lateness based on existing clock-in or current time for new clock-in
+  const calculateLateness = useCallback((checkCurrentTime: boolean = false) => {
+    if (!company?.work_start_time) return { isLate: false, lateMinutes: 0 };
+
+    const now = new Date();
+    const [hours, minutes] = company.work_start_time.split(':').map(Number);
+    
+    const workStartToday = new Date(now);
+    workStartToday.setHours(hours, minutes, 0, 0);
+
+    // If checking current time (for camera preview) or already have clock-in
+    if (checkCurrentTime) {
+      const diffMs = now.getTime() - workStartToday.getTime();
+      const diffMinutes = Math.floor(diffMs / 60000);
+      return {
+        isLate: diffMinutes > 0,
+        lateMinutes: diffMinutes > 0 ? diffMinutes : 0,
+      };
+    }
+
+    // Check existing clock-in record
+    if (!todayClockIn) return { isLate: false, lateMinutes: 0 };
+
+    const clockInTime = new Date(todayClockIn.recorded_at);
+    const diffMs = clockInTime.getTime() - workStartToday.getTime();
+    const diffMinutes = Math.floor(diffMs / 60000);
+
+    return {
+      isLate: diffMinutes > 0,
+      lateMinutes: diffMinutes > 0 ? diffMinutes : 0,
+    };
+  }, [todayClockIn, company?.work_start_time]);
+
+  // For status card - show lateness from existing record
+  const { isLate, lateMinutes } = calculateLateness(false);
+  
+  // For camera preview - check current time lateness
+  const currentTimeLateness = calculateLateness(true);
 
   // Refresh location (just get GPS, no geofencing check)
   const refreshLocation = useCallback(async () => {
@@ -374,6 +428,9 @@ const Dashboard = () => {
             status={status}
             lastClockIn={lastClockIn ? new Date(lastClockIn.recorded_at) : null}
             lastClockOut={lastClockOut ? new Date(lastClockOut.recorded_at) : null}
+            isLate={isLate}
+            lateMinutes={lateMinutes}
+            workStartTime={company?.work_start_time}
           />
 
           {/* Geofence Status Banner */}
@@ -549,6 +606,8 @@ const Dashboard = () => {
           recordType={pendingRecordType === 'clock_in' ? 'CLOCK IN' : 'CLOCK OUT'}
           latitude={currentPosition.latitude}
           longitude={currentPosition.longitude}
+          isLate={pendingRecordType === 'clock_in' ? currentTimeLateness.isLate : false}
+          lateMinutes={pendingRecordType === 'clock_in' ? currentTimeLateness.lateMinutes : 0}
         />
       )}
     </div>

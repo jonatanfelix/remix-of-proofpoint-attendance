@@ -11,6 +11,8 @@ interface CameraCaptureProps {
   recordType: 'CLOCK IN' | 'CLOCK OUT';
   latitude: number;
   longitude: number;
+  isLate?: boolean;
+  lateMinutes?: number;
 }
 
 const CameraCapture = ({
@@ -21,6 +23,8 @@ const CameraCapture = ({
   recordType,
   latitude,
   longitude,
+  isLate,
+  lateMinutes,
 }: CameraCaptureProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -109,7 +113,8 @@ const CameraCapture = ({
     const padding = 20;
     const lineHeight = 28;
     const fontSize = 18;
-    const watermarkHeight = lineHeight * 5 + padding * 2;
+    const hasLateInfo = recordType === 'CLOCK IN' && isLate && lateMinutes && lateMinutes > 0;
+    const watermarkHeight = lineHeight * (hasLateInfo ? 6 : 5) + padding * 2;
 
     // Semi-transparent background
     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
@@ -128,25 +133,37 @@ const CameraCapture = ({
     ctx.fillStyle = '#FFFFFF';
     ctx.fillText(recordType, padding + 8, startY);
 
+    // Late badge if applicable
+    let currentLine = 1;
+    if (hasLateInfo) {
+      ctx.fillStyle = '#ef4444';
+      ctx.fillRect(padding + 110, startY - fontSize, 140, fontSize + 8);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText(`TERLAMBAT ${lateMinutes}m`, padding + 118, startY);
+    }
+
     // Employee name
     ctx.fillStyle = '#FFFFFF';
-    ctx.fillText(`Karyawan: ${employeeName}`, padding, startY + lineHeight);
+    ctx.fillText(`Karyawan: ${employeeName}`, padding, startY + lineHeight * currentLine);
+    currentLine++;
 
     // Timestamp
-    ctx.fillText(`Waktu: ${timestamp}`, padding, startY + lineHeight * 2);
+    ctx.fillText(`Waktu: ${timestamp}`, padding, startY + lineHeight * currentLine);
+    currentLine++;
 
     // GPS coordinates
     ctx.font = `${fontSize - 2}px Arial`;
     ctx.fillText(
       `GPS: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
       padding,
-      startY + lineHeight * 3
+      startY + lineHeight * currentLine
     );
+    currentLine++;
 
     // Verification text
     ctx.fillStyle = '#9ca3af';
     ctx.font = `italic ${fontSize - 4}px Arial`;
-    ctx.fillText('GeoAttend Verified', padding, startY + lineHeight * 4);
+    ctx.fillText('GeoAttend Verified', padding, startY + lineHeight * currentLine);
 
     // Get the watermarked image
     const imageDataUrl = canvas.toDataURL('image/jpeg', 0.85);
@@ -156,7 +173,7 @@ const CameraCapture = ({
     
     onCapture(imageDataUrl);
     onClose();
-  }, [employeeName, recordType, latitude, longitude, onCapture, onClose, stopCamera]);
+  }, [employeeName, recordType, latitude, longitude, isLate, lateMinutes, onCapture, onClose, stopCamera]);
 
   const handleClose = useCallback(() => {
     stopCamera();
