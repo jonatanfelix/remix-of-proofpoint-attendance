@@ -132,6 +132,12 @@ const Header = () => {
               <DropdownMenuItem className="text-muted-foreground">
                 {user?.email}
               </DropdownMenuItem>
+              <DropdownMenuItem asChild className="cursor-pointer">
+                <Link to="/profile">
+                  <User className="mr-2 h-4 w-4" />
+                  Profil & Password
+                </Link>
+              </DropdownMenuItem>
               {isAdminOrDeveloper && (
                 <>
                   <DropdownMenuItem asChild className="cursor-pointer sm:hidden">
