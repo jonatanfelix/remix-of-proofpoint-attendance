@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { MapPin, Clock, Shield, Info, ArrowLeft } from 'lucide-react';
+import { MapPin, Clock, Shield, Info, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -15,24 +15,68 @@ const loginSchema = z.object({
   password: z.string().min(6, 'Password minimal 6 karakter'),
 });
 
+type AuthView = 'login' | 'forgot-password' | 'reset-password';
+
 const Auth = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  
+  const [view, setView] = useState<AuthView>('login');
   const [resetEmail, setResetEmail] = useState('');
   const [isResetting, setIsResetting] = useState(false);
+  
+  // Reset password form
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   
   const { signIn, user, loading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  // Check for recovery token in URL on mount
   useEffect(() => {
-    if (user && !loading) {
+    const handleRecoveryToken = async () => {
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const accessToken = hashParams.get('access_token');
+      const type = hashParams.get('type');
+      
+      if (accessToken && type === 'recovery') {
+        console.log('Recovery token detected, showing reset password form');
+        // Set the session with the recovery token
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: hashParams.get('refresh_token') || '',
+        });
+        
+        if (error) {
+          console.error('Error setting session:', error);
+          toast({
+            title: 'Error',
+            description: 'Link reset password tidak valid atau sudah kedaluwarsa.',
+            variant: 'destructive',
+          });
+        } else {
+          setView('reset-password');
+          // Clear the hash from URL
+          window.history.replaceState(null, '', window.location.pathname);
+        }
+      }
+    };
+    
+    handleRecoveryToken();
+  }, [toast]);
+
+  useEffect(() => {
+    if (user && !loading && view !== 'reset-password') {
       navigate('/');
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, navigate, view]);
 
   const validateForm = () => {
     setErrors({});
@@ -129,7 +173,7 @@ const Auth = () => {
         title: 'Email Terkirim!',
         description: 'Cek inbox email Anda untuk link reset password.',
       });
-      setShowForgotPassword(false);
+      setView('login');
       setResetEmail('');
     } catch (error: any) {
       console.error('Reset password error:', error);
@@ -143,6 +187,66 @@ const Auth = () => {
     }
   };
 
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!newPassword || !confirmPassword) {
+      toast({
+        title: 'Error',
+        description: 'Masukkan password baru',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      toast({
+        title: 'Error',
+        description: 'Password minimal 6 karakter',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: 'Error',
+        description: 'Password tidak cocok',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      toast({
+        title: 'Password Berhasil Diubah!',
+        description: 'Anda akan dialihkan ke halaman utama.',
+      });
+      
+      // Navigate to home after successful password update
+      navigate('/');
+    } catch (error: any) {
+      console.error('Update password error:', error);
+      toast({
+        title: 'Gagal Mengubah Password',
+        description: error.message || 'Terjadi kesalahan. Coba lagi nanti.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -150,6 +254,226 @@ const Auth = () => {
       </div>
     );
   }
+
+  const renderCardContent = () => {
+    switch (view) {
+      case 'reset-password':
+        return (
+          <>
+            <CardHeader className="space-y-1">
+              <CardTitle className="text-2xl">Buat Password Baru</CardTitle>
+              <CardDescription>
+                Masukkan password baru untuk akun Anda
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleUpdatePassword} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="new-password">Password Baru</Label>
+                  <div className="relative">
+                    <Input
+                      id="new-password"
+                      type={showNewPassword ? 'text' : 'password'}
+                      placeholder="Minimal 6 karakter"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="border-2 border-foreground pr-10"
+                      disabled={isUpdatingPassword}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                    >
+                      {showNewPassword ? (
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="confirm-password">Konfirmasi Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="confirm-password"
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      placeholder="Ulangi password baru"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="border-2 border-foreground pr-10"
+                      disabled={isUpdatingPassword}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                <Button 
+                  type="submit" 
+                  className="w-full border-2 border-foreground shadow-sm"
+                  disabled={isUpdatingPassword}
+                >
+                  {isUpdatingPassword ? 'Menyimpan...' : 'Simpan Password Baru'}
+                </Button>
+              </form>
+            </CardContent>
+          </>
+        );
+
+      case 'forgot-password':
+        return (
+          <>
+            <CardHeader className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setView('login')}
+                  className="h-8 w-8"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <CardTitle className="text-2xl">Lupa Password</CardTitle>
+              </div>
+              <CardDescription>
+                Masukkan email Anda untuk menerima link reset password
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleForgotPassword} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="reset-email">Email</Label>
+                  <Input
+                    id="reset-email"
+                    type="email"
+                    placeholder="you@company.com"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    className="border-2 border-foreground"
+                    disabled={isResetting}
+                  />
+                </div>
+
+                <Button 
+                  type="submit" 
+                  className="w-full border-2 border-foreground shadow-sm"
+                  disabled={isResetting}
+                >
+                  {isResetting ? 'Mengirim...' : 'Kirim Link Reset'}
+                </Button>
+              </form>
+            </CardContent>
+          </>
+        );
+
+      default:
+        return (
+          <>
+            <CardHeader className="space-y-1">
+              <CardTitle className="text-2xl">Selamat Datang</CardTitle>
+              <CardDescription>
+                Masukkan kredensial untuk mengakses akun Anda
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="you@company.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="border-2 border-foreground"
+                    disabled={isSubmitting}
+                  />
+                  {errors.email && (
+                    <p className="text-sm text-destructive">{errors.email}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="password">Password</Label>
+                    <Button
+                      type="button"
+                      variant="link"
+                      className="h-auto p-0 text-sm text-muted-foreground hover:text-foreground"
+                      onClick={() => setView('forgot-password')}
+                    >
+                      Lupa password?
+                    </Button>
+                  </div>
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="border-2 border-foreground pr-10"
+                      disabled={isSubmitting}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </Button>
+                  </div>
+                  {errors.password && (
+                    <p className="text-sm text-destructive">{errors.password}</p>
+                  )}
+                </div>
+
+                <Button 
+                  type="submit" 
+                  className="w-full border-2 border-foreground shadow-sm"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Signing in...' : 'Sign In'}
+                </Button>
+              </form>
+
+              {/* Info about signup */}
+              <div className="mt-4 p-3 rounded-lg bg-muted border-2 border-foreground">
+                <div className="flex items-start gap-2">
+                  <Info className="h-5 w-5 mt-0.5 shrink-0 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">
+                    Pendaftaran akun baru hanya dapat dilakukan oleh Admin. 
+                    Hubungi Admin perusahaan Anda untuk mendapatkan akun.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </>
+        );
+    }
+  };
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -194,124 +518,7 @@ const Auth = () => {
 
         {/* Auth Card */}
         <Card className="w-full max-w-md border-2 border-foreground shadow-md">
-          <CardHeader className="space-y-1">
-            {showForgotPassword ? (
-              <>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setShowForgotPassword(false)}
-                    className="h-8 w-8"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                  </Button>
-                  <CardTitle className="text-2xl">Lupa Password</CardTitle>
-                </div>
-                <CardDescription>
-                  Masukkan email Anda untuk menerima link reset password
-                </CardDescription>
-              </>
-            ) : (
-              <>
-                <CardTitle className="text-2xl">Selamat Datang</CardTitle>
-                <CardDescription>
-                  Masukkan kredensial untuk mengakses akun Anda
-                </CardDescription>
-              </>
-            )}
-          </CardHeader>
-          <CardContent>
-            {showForgotPassword ? (
-              <form onSubmit={handleForgotPassword} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="reset-email">Email</Label>
-                  <Input
-                    id="reset-email"
-                    type="email"
-                    placeholder="you@company.com"
-                    value={resetEmail}
-                    onChange={(e) => setResetEmail(e.target.value)}
-                    className="border-2 border-foreground"
-                    disabled={isResetting}
-                  />
-                </div>
-
-                <Button 
-                  type="submit" 
-                  className="w-full border-2 border-foreground shadow-sm"
-                  disabled={isResetting}
-                >
-                  {isResetting ? 'Mengirim...' : 'Kirim Link Reset'}
-                </Button>
-              </form>
-            ) : (
-              <>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="you@company.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="border-2 border-foreground"
-                      disabled={isSubmitting}
-                    />
-                    {errors.email && (
-                      <p className="text-sm text-destructive">{errors.email}</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="password">Password</Label>
-                      <Button
-                        type="button"
-                        variant="link"
-                        className="h-auto p-0 text-sm text-muted-foreground hover:text-foreground"
-                        onClick={() => setShowForgotPassword(true)}
-                      >
-                        Lupa password?
-                      </Button>
-                    </div>
-                    <Input
-                      id="password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="border-2 border-foreground"
-                      disabled={isSubmitting}
-                    />
-                    {errors.password && (
-                      <p className="text-sm text-destructive">{errors.password}</p>
-                    )}
-                  </div>
-
-                  <Button 
-                    type="submit" 
-                    className="w-full border-2 border-foreground shadow-sm"
-                    disabled={isSubmitting}
-                  >
-                    {isSubmitting ? 'Signing in...' : 'Sign In'}
-                  </Button>
-                </form>
-
-                {/* Info about signup */}
-                <div className="mt-4 p-3 rounded-lg bg-muted border-2 border-foreground">
-                  <div className="flex items-start gap-2">
-                    <Info className="h-5 w-5 mt-0.5 shrink-0 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">
-                      Pendaftaran akun baru hanya dapat dilakukan oleh Admin. 
-                      Hubungi Admin perusahaan Anda untuk mendapatkan akun.
-                    </p>
-                  </div>
-                </div>
-              </>
-            )}
-          </CardContent>
+          {renderCardContent()}
         </Card>
       </main>
 
