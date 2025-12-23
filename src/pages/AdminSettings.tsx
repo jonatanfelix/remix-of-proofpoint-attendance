@@ -65,6 +65,8 @@ const AdminSettings = () => {
     enabled: !!user?.id,
   });
 
+  const isAdminOrDeveloper = userRole === 'admin' || userRole === 'developer';
+
   // Fetch company settings
   const { data: company, isLoading: companyLoading } = useQuery({
     queryKey: ['company-settings'],
@@ -78,7 +80,7 @@ const AdminSettings = () => {
       if (error) throw error;
       return data as CompanySettings | null;
     },
-    enabled: userRole === 'admin',
+    enabled: isAdminOrDeveloper,
   });
 
   // Set initial values when company data loads
@@ -256,8 +258,8 @@ const AdminSettings = () => {
     );
   }
 
-  // Not admin - redirect
-  if (userRole !== 'admin') {
+  // Not admin/developer - redirect
+  if (!isAdminOrDeveloper) {
     navigate('/');
     return null;
   }
