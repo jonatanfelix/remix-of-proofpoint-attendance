@@ -64,6 +64,39 @@ export type Database = {
           },
         ]
       }
+      companies: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          office_latitude: number | null
+          office_longitude: number | null
+          radius_meters: number
+          updated_at: string
+          work_start_time: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          office_latitude?: number | null
+          office_longitude?: number | null
+          radius_meters?: number
+          updated_at?: string
+          work_start_time?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          office_latitude?: number | null
+          office_longitude?: number | null
+          radius_meters?: number
+          updated_at?: string
+          work_start_time?: string
+        }
+        Relationships: []
+      }
       locations: {
         Row: {
           address: string | null
@@ -102,33 +135,47 @@ export type Database = {
       }
       profiles: {
         Row: {
+          company_id: string | null
           created_at: string
           email: string
           full_name: string
           id: string
+          requires_geofence: boolean
           role: Database["public"]["Enums"]["app_role"]
           updated_at: string
           user_id: string
         }
         Insert: {
+          company_id?: string | null
           created_at?: string
           email: string
           full_name: string
           id?: string
+          requires_geofence?: boolean
           role?: Database["public"]["Enums"]["app_role"]
           updated_at?: string
           user_id: string
         }
         Update: {
+          company_id?: string | null
           created_at?: string
           email?: string
           full_name?: string
           id?: string
+          requires_geofence?: boolean
           role?: Database["public"]["Enums"]["app_role"]
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {

@@ -11,8 +11,9 @@ import CameraCapture from '@/components/attendance/CameraCapture';
 import LocationMap from '@/components/attendance/LocationMap';
 import { getCurrentPosition, GeolocationError } from '@/lib/geolocation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { MapPin, RefreshCw, ExternalLink } from 'lucide-react';
+import { MapPin, RefreshCw, ExternalLink, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 interface AttendanceRecord {
   id: string;
@@ -23,7 +24,39 @@ interface AttendanceRecord {
 
 interface ProfileData {
   full_name: string;
+  requires_geofence: boolean;
+  company_id: string | null;
 }
+
+interface CompanySettings {
+  id: string;
+  name: string;
+  office_latitude: number | null;
+  office_longitude: number | null;
+  radius_meters: number;
+  work_start_time: string;
+}
+
+// Calculate distance between two coordinates in meters (Haversine formula)
+const calculateDistance = (
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number
+): number => {
+  const R = 6371e3; // Earth's radius in meters
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lng2 - lng1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c;
+};
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -42,19 +75,35 @@ const Dashboard = () => {
   const [showCamera, setShowCamera] = useState(false);
   const [pendingRecordType, setPendingRecordType] = useState<'clock_in' | 'clock_out' | null>(null);
 
-  // Fetch user profile for camera watermark
+  // Fetch user profile with geofence settings
   const { data: profile } = useQuery({
     queryKey: ['profile', user?.id],
     queryFn: async () => {
       if (!user?.id) return null;
       const { data, error } = await supabase
         .from('profiles')
-        .select('full_name')
+        .select('full_name, requires_geofence, company_id')
         .eq('user_id', user.id)
         .maybeSingle();
 
       if (error) return null;
       return data as ProfileData | null;
+    },
+    enabled: !!user?.id,
+  });
+
+  // Fetch company settings
+  const { data: company } = useQuery({
+    queryKey: ['company-settings'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('companies')
+        .select('*')
+        .limit(1)
+        .maybeSingle();
+
+      if (error) return null;
+      return data as CompanySettings | null;
     },
     enabled: !!user?.id,
   });
@@ -206,6 +255,26 @@ const Dashboard = () => {
       });
       return;
     }
+
+    // Check geofence if required
+    if (profile?.requires_geofence && company?.office_latitude && company?.office_longitude) {
+      const distance = calculateDistance(
+        currentPosition.latitude,
+        currentPosition.longitude,
+        company.office_latitude,
+        company.office_longitude
+      );
+
+      if (distance > company.radius_meters) {
+        toast({
+          title: 'Di Luar Jangkauan',
+          description: `Anda berada ${Math.round(distance)}m dari kantor. Maksimal ${company.radius_meters}m untuk absen.`,
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
     setPendingRecordType('clock_in');
     setShowCamera(true);
   };
@@ -219,6 +288,26 @@ const Dashboard = () => {
       });
       return;
     }
+
+    // Check geofence if required (same logic for clock out)
+    if (profile?.requires_geofence && company?.office_latitude && company?.office_longitude) {
+      const distance = calculateDistance(
+        currentPosition.latitude,
+        currentPosition.longitude,
+        company.office_latitude,
+        company.office_longitude
+      );
+
+      if (distance > company.radius_meters) {
+        toast({
+          title: 'Di Luar Jangkauan',
+          description: `Anda berada ${Math.round(distance)}m dari kantor. Maksimal ${company.radius_meters}m untuk absen.`,
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
     setPendingRecordType('clock_out');
     setShowCamera(true);
   };
@@ -250,9 +339,29 @@ const Dashboard = () => {
     setPendingRecordType(null);
   };
 
-  // No geofencing - can clock in/out from anywhere as long as we have GPS
-  const canClockIn = currentPosition !== null && status !== 'clocked_in';
-  const canClockOut = currentPosition !== null && status === 'clocked_in';
+  // Calculate distance to office for display
+  const distanceToOffice =
+    currentPosition && company?.office_latitude && company?.office_longitude
+      ? calculateDistance(
+          currentPosition.latitude,
+          currentPosition.longitude,
+          company.office_latitude,
+          company.office_longitude
+        )
+      : null;
+
+  const isWithinGeofence =
+    distanceToOffice !== null && company ? distanceToOffice <= company.radius_meters : true;
+
+  // Check if can clock in/out based on geofence requirements
+  const geofenceCheck = () => {
+    if (!profile?.requires_geofence) return true; // No geofence required
+    if (!company?.office_latitude || !company?.office_longitude) return true; // No office location set
+    return isWithinGeofence;
+  };
+
+  const canClockIn = currentPosition !== null && status !== 'clocked_in' && geofenceCheck();
+  const canClockOut = currentPosition !== null && status === 'clocked_in' && geofenceCheck();
 
   return (
     <div className="min-h-screen bg-background">
@@ -266,6 +375,52 @@ const Dashboard = () => {
             lastClockIn={lastClockIn ? new Date(lastClockIn.recorded_at) : null}
             lastClockOut={lastClockOut ? new Date(lastClockOut.recorded_at) : null}
           />
+
+          {/* Geofence Status Banner */}
+          {profile && (
+            <Card className={profile.requires_geofence ? 'border-2 border-primary' : 'border-2 border-muted'}>
+              <CardContent className="py-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {profile.requires_geofence ? (
+                      <>
+                        <MapPin className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-medium">Wajib Absen di Kantor</span>
+                      </>
+                    ) : (
+                      <>
+                        <MapPin className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-medium text-muted-foreground">Bebas Lokasi</span>
+                      </>
+                    )}
+                  </div>
+                  {profile.requires_geofence && distanceToOffice !== null && (
+                    <Badge variant={isWithinGeofence ? 'default' : 'destructive'}>
+                      {isWithinGeofence ? '✓ Dalam Jangkauan' : `${Math.round(distanceToOffice)}m dari kantor`}
+                    </Badge>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Warning if outside geofence */}
+          {profile?.requires_geofence && !isWithinGeofence && distanceToOffice !== null && (
+            <Card className="border-2 border-destructive bg-destructive/5">
+              <CardContent className="py-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-destructive">Di Luar Jangkauan Kantor</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Anda berada {Math.round(distanceToOffice)}m dari kantor. 
+                      Maksimal {company?.radius_meters || 100}m untuk bisa absen.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* GPS Status dengan Peta */}
           <Card>
