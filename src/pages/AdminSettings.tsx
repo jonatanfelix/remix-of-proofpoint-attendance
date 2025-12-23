@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { getCurrentPosition } from '@/lib/geolocation';
 import { MapPin, Save, Building, Clock, Target, Loader2, Navigation } from 'lucide-react';
 import { toast } from 'sonner';
 import L from 'leaflet';
@@ -163,39 +164,27 @@ const AdminSettings = () => {
   };
 
   // Get current location using GPS
-  const handleUseMyLocation = () => {
-    if (!navigator.geolocation) {
-      toast.error('Browser tidak mendukung GPS');
-      return;
-    }
-
+  const handleUseMyLocation = async () => {
     setIsGettingLocation(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude: lat, longitude: lng } = position.coords;
-        handleLocationSelect(lat, lng);
-        toast.success('Lokasi berhasil didapat dari GPS!');
-        setIsGettingLocation(false);
-      },
-      (error) => {
-        console.error('Geolocation error:', error);
-        let message = 'Gagal mendapatkan lokasi.';
-        if (error.code === error.PERMISSION_DENIED) {
-          message = 'Akses lokasi ditolak. Izinkan akses lokasi di browser.';
-        } else if (error.code === error.POSITION_UNAVAILABLE) {
-          message = 'Lokasi tidak tersedia. Pastikan GPS aktif.';
-        } else if (error.code === error.TIMEOUT) {
-          message = 'Timeout. Coba lagi.';
-        }
-        toast.error(message);
-        setIsGettingLocation(false);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0,
+
+    try {
+      const pos = await getCurrentPosition();
+      console.log('[AdminSettings] GPS position:', pos);
+
+      handleLocationSelect(pos.latitude, pos.longitude);
+
+      const acc = Math.round(pos.accuracy);
+      if (acc > 2000) {
+        toast.warning(`Akurasi lokasi rendah (±${acc}m). Coba nyalakan GPS di HP atau pindah ke area terbuka.`);
+      } else {
+        toast.success(`Lokasi didapat dari GPS (akurasi ±${acc}m).`);
       }
-    );
+    } catch (e: any) {
+      console.error('[AdminSettings] GPS error:', e);
+      toast.error(e?.message || 'Gagal mendapatkan lokasi dari GPS.');
+    } finally {
+      setIsGettingLocation(false);
+    }
   };
 
   const handleSave = () => {
@@ -430,22 +419,53 @@ const AdminSettings = () => {
               {/* Coordinates */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Latitude</Label>
+                  <Label htmlFor="office-lat">Latitude</Label>
                   <Input
-                    value={latitude?.toFixed(6) || '-'}
-                    readOnly
-                    className="border-2 border-foreground bg-muted"
+                    id="office-lat"
+                    type="number"
+                    inputMode="decimal"
+                    step="0.000001"
+                    value={latitude ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setLatitude(v === '' ? null : Number(v));
+                    }}
+                    className="border-2 border-foreground"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Longitude</Label>
+                  <Label htmlFor="office-lng">Longitude</Label>
                   <Input
-                    value={longitude?.toFixed(6) || '-'}
-                    readOnly
-                    className="border-2 border-foreground bg-muted"
+                    id="office-lng"
+                    type="number"
+                    inputMode="decimal"
+                    step="0.000001"
+                    value={longitude ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setLongitude(v === '' ? null : Number(v));
+                    }}
+                    className="border-2 border-foreground"
                   />
                 </div>
               </div>
+
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full"
+                disabled={latitude == null || longitude == null}
+                onClick={() => {
+                  if (latitude == null || longitude == null) return;
+                  handleLocationSelect(latitude, longitude);
+                }}
+              >
+                Terapkan Koordinat
+              </Button>
+
+              <p className="text-xs text-muted-foreground">
+                Tips: jika GPS browser meleset (sering terjadi di laptop/PC), salin koordinat dari Google Maps lalu klik "Terapkan Koordinat".
+              </p>
 
               {latitude && longitude && (
                 <div className="p-3 rounded-lg bg-primary/10 border-2 border-primary">
