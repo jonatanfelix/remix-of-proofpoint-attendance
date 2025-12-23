@@ -41,11 +41,13 @@ const AdminSettings = () => {
   const [radius, setRadius] = useState(100);
   const [workStartTime, setWorkStartTime] = useState('08:00');
   const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
 
   // Map refs
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
+  const radiusRef = useRef(radius);
   const circleRef = useRef<L.Circle | null>(null);
 
   // Check if user is admin
@@ -86,13 +88,20 @@ const AdminSettings = () => {
   // Set initial values when company data loads
   useEffect(() => {
     if (company) {
+      console.log('[AdminSettings] Company data loaded:', company);
       setCompanyName(company.name);
       setLatitude(company.office_latitude);
       setLongitude(company.office_longitude);
       setRadius(company.radius_meters);
+      radiusRef.current = company.radius_meters;
       setWorkStartTime(company.work_start_time?.slice(0, 5) || '08:00');
     }
   }, [company]);
+
+  // Keep radiusRef in sync
+  useEffect(() => {
+    radiusRef.current = radius;
+  }, [radius]);
 
   // Update company settings
   const updateMutation = useMutation({
@@ -122,12 +131,14 @@ const AdminSettings = () => {
   });
 
   const handleLocationSelect = (lat: number, lng: number) => {
+    console.log('[AdminSettings] handleLocationSelect called with:', lat, lng);
     setLatitude(lat);
     setLongitude(lng);
     toast.info(`Lokasi dipilih: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
 
     // Update marker and circle on map
     if (mapInstanceRef.current) {
+      console.log('[AdminSettings] Updating map marker and circle');
       if (markerRef.current) {
         markerRef.current.setLatLng([lat, lng]);
       } else {
@@ -141,11 +152,13 @@ const AdminSettings = () => {
           color: '#3b82f6',
           fillColor: '#3b82f6',
           fillOpacity: 0.2,
-          radius: radius,
+          radius: radiusRef.current,
         }).addTo(mapInstanceRef.current);
       }
 
       mapInstanceRef.current.setView([lat, lng], 17);
+    } else {
+      console.log('[AdminSettings] Map instance not ready');
     }
   };
 
@@ -193,25 +206,19 @@ const AdminSettings = () => {
     updateMutation.mutate();
   };
 
-  // Initialize map only after company data is loaded
+  // Initialize map only once, separately from data
   useEffect(() => {
-    if (!mapRef.current || companyLoading) return;
+    if (!mapRef.current || mapInstanceRef.current) return;
 
-    // Cleanup existing map first
-    if (mapInstanceRef.current) {
-      mapInstanceRef.current.remove();
-      mapInstanceRef.current = null;
-      markerRef.current = null;
-      circleRef.current = null;
-    }
-
-    const centerLat = company?.office_latitude ?? -6.2088;
-    const centerLng = company?.office_longitude ?? 106.8456;
-    const hasLocation = company?.office_latitude != null && company?.office_longitude != null;
+    console.log('[AdminSettings] Initializing map');
+    
+    // Default to Jakarta if no company location yet
+    const defaultLat = -6.2088;
+    const defaultLng = 106.8456;
 
     mapInstanceRef.current = L.map(mapRef.current, {
-      center: [centerLat, centerLng],
-      zoom: hasLocation ? 17 : 12,
+      center: [defaultLat, defaultLng],
+      zoom: 12,
     });
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -219,21 +226,39 @@ const AdminSettings = () => {
       maxZoom: 19,
     }).addTo(mapInstanceRef.current);
 
-    // Add click handler
+    // Add click handler - directly update state and map
     mapInstanceRef.current.on('click', (e: L.LeafletMouseEvent) => {
-      handleLocationSelect(e.latlng.lat, e.latlng.lng);
+      const { lat, lng } = e.latlng;
+      console.log('[AdminSettings] Map clicked at:', lat, lng);
+      
+      // Update state
+      setLatitude(lat);
+      setLongitude(lng);
+      toast.info(`Lokasi dipilih: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+
+      // Update marker
+      if (markerRef.current) {
+        markerRef.current.setLatLng([lat, lng]);
+      } else if (mapInstanceRef.current) {
+        markerRef.current = L.marker([lat, lng]).addTo(mapInstanceRef.current);
+      }
+
+      // Update circle
+      if (circleRef.current) {
+        circleRef.current.setLatLng([lat, lng]);
+      } else if (mapInstanceRef.current) {
+        circleRef.current = L.circle([lat, lng], {
+          color: '#3b82f6',
+          fillColor: '#3b82f6',
+          fillOpacity: 0.2,
+          radius: radiusRef.current,
+        }).addTo(mapInstanceRef.current);
+      }
+
+      mapInstanceRef.current?.setView([lat, lng], 17);
     });
 
-    // Add initial marker if location exists in company data
-    if (hasLocation) {
-      markerRef.current = L.marker([centerLat, centerLng]).addTo(mapInstanceRef.current);
-      circleRef.current = L.circle([centerLat, centerLng], {
-        color: '#3b82f6',
-        fillColor: '#3b82f6',
-        fillOpacity: 0.2,
-        radius: company?.radius_meters ?? 100,
-      }).addTo(mapInstanceRef.current);
-    }
+    setMapReady(true);
 
     return () => {
       if (mapInstanceRef.current) {
@@ -243,7 +268,41 @@ const AdminSettings = () => {
         circleRef.current = null;
       }
     };
-  }, [company, companyLoading]);
+  }, []);
+
+  // Update map when company data loads
+  useEffect(() => {
+    if (!mapReady || !mapInstanceRef.current || companyLoading) return;
+    
+    const centerLat = company?.office_latitude;
+    const centerLng = company?.office_longitude;
+    
+    if (centerLat != null && centerLng != null) {
+      console.log('[AdminSettings] Setting map to company location:', centerLat, centerLng);
+      
+      mapInstanceRef.current.setView([centerLat, centerLng], 17);
+
+      // Add or update marker
+      if (markerRef.current) {
+        markerRef.current.setLatLng([centerLat, centerLng]);
+      } else {
+        markerRef.current = L.marker([centerLat, centerLng]).addTo(mapInstanceRef.current);
+      }
+
+      // Add or update circle
+      if (circleRef.current) {
+        circleRef.current.setLatLng([centerLat, centerLng]);
+        circleRef.current.setRadius(company?.radius_meters ?? 100);
+      } else {
+        circleRef.current = L.circle([centerLat, centerLng], {
+          color: '#3b82f6',
+          fillColor: '#3b82f6',
+          fillOpacity: 0.2,
+          radius: company?.radius_meters ?? 100,
+        }).addTo(mapInstanceRef.current);
+      }
+    }
+  }, [mapReady, company, companyLoading]);
 
   // Update circle radius when radius changes
   useEffect(() => {
