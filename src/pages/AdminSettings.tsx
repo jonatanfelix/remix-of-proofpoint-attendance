@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -10,16 +10,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { MapPin, Save, Building, Clock, Target } from 'lucide-react';
 import { toast } from 'sonner';
-import { MapContainer, TileLayer, Marker, Circle, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 // Fix for default marker icon
-delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: () => string })._getIconUrl;
+delete (L.Icon.Default.prototype as { _getIconUrl?: () => string })._getIconUrl;
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 });
 
 interface CompanySettings {
@@ -31,19 +30,6 @@ interface CompanySettings {
   work_start_time: string;
 }
 
-interface MapClickHandlerProps {
-  onLocationSelect: (lat: number, lng: number) => void;
-}
-
-const MapClickHandler = ({ onLocationSelect }: MapClickHandlerProps) => {
-  useMapEvents({
-    click: (e) => {
-      onLocationSelect(e.latlng.lat, e.latlng.lng);
-    },
-  });
-  return null;
-};
-
 const AdminSettings = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -54,6 +40,12 @@ const AdminSettings = () => {
   const [longitude, setLongitude] = useState<number | null>(null);
   const [radius, setRadius] = useState(100);
   const [workStartTime, setWorkStartTime] = useState('08:00');
+
+  // Map refs
+  const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
+  const markerRef = useRef<L.Marker | null>(null);
+  const circleRef = useRef<L.Circle | null>(null);
 
   // Check if user is admin
   const { data: userRole, isLoading: roleLoading } = useQuery({
@@ -130,6 +122,28 @@ const AdminSettings = () => {
     setLatitude(lat);
     setLongitude(lng);
     toast.info(`Lokasi dipilih: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+
+    // Update marker and circle on map
+    if (mapInstanceRef.current) {
+      if (markerRef.current) {
+        markerRef.current.setLatLng([lat, lng]);
+      } else {
+        markerRef.current = L.marker([lat, lng]).addTo(mapInstanceRef.current);
+      }
+
+      if (circleRef.current) {
+        circleRef.current.setLatLng([lat, lng]);
+      } else {
+        circleRef.current = L.circle([lat, lng], {
+          color: '#3b82f6',
+          fillColor: '#3b82f6',
+          fillOpacity: 0.2,
+          radius: radius,
+        }).addTo(mapInstanceRef.current);
+      }
+
+      mapInstanceRef.current.setView([lat, lng], 17);
+    }
   };
 
   const handleSave = () => {
@@ -139,6 +153,57 @@ const AdminSettings = () => {
     }
     updateMutation.mutate();
   };
+
+  // Initialize map
+  useEffect(() => {
+    if (!mapRef.current || mapInstanceRef.current) return;
+
+    const defaultCenter: [number, number] = latitude && longitude 
+      ? [latitude, longitude] 
+      : [-6.2088, 106.8456];
+
+    mapInstanceRef.current = L.map(mapRef.current, {
+      center: defaultCenter,
+      zoom: latitude && longitude ? 17 : 12,
+    });
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 19,
+    }).addTo(mapInstanceRef.current);
+
+    // Add click handler
+    mapInstanceRef.current.on('click', (e: L.LeafletMouseEvent) => {
+      handleLocationSelect(e.latlng.lat, e.latlng.lng);
+    });
+
+    // Add initial marker if location exists
+    if (latitude && longitude) {
+      markerRef.current = L.marker([latitude, longitude]).addTo(mapInstanceRef.current);
+      circleRef.current = L.circle([latitude, longitude], {
+        color: '#3b82f6',
+        fillColor: '#3b82f6',
+        fillOpacity: 0.2,
+        radius: radius,
+      }).addTo(mapInstanceRef.current);
+    }
+
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+        markerRef.current = null;
+        circleRef.current = null;
+      }
+    };
+  }, []);
+
+  // Update circle radius when radius changes
+  useEffect(() => {
+    if (circleRef.current) {
+      circleRef.current.setRadius(radius);
+    }
+  }, [radius]);
 
   // Loading state
   if (roleLoading || companyLoading) {
@@ -159,10 +224,6 @@ const AdminSettings = () => {
     navigate('/');
     return null;
   }
-
-  const mapCenter: [number, number] = latitude && longitude 
-    ? [latitude, longitude] 
-    : [-6.2088, 106.8456]; // Default: Jakarta
 
   return (
     <div className="min-h-screen bg-background">
@@ -291,33 +352,11 @@ const AdminSettings = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-[400px] rounded-lg overflow-hidden border-2 border-foreground">
-              <MapContainer
-                center={mapCenter}
-                zoom={latitude && longitude ? 17 : 12}
-                style={{ height: '100%', width: '100%' }}
-              >
-                <TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                />
-                <MapClickHandler onLocationSelect={handleLocationSelect} />
-                {latitude !== null && longitude !== null && (
-                  <Marker position={[latitude, longitude]} />
-                )}
-                {latitude !== null && longitude !== null && (
-                  <Circle
-                    center={[latitude, longitude]}
-                    radius={radius}
-                    pathOptions={{
-                      color: 'hsl(var(--primary))',
-                      fillColor: 'hsl(var(--primary))',
-                      fillOpacity: 0.2,
-                    }}
-                  />
-                )}
-              </MapContainer>
-            </div>
+            <div 
+              ref={mapRef}
+              className="h-[400px] rounded-lg overflow-hidden border-2 border-foreground"
+              style={{ minHeight: '400px' }}
+            />
           </CardContent>
         </Card>
 
