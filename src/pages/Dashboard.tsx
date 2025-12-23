@@ -418,6 +418,31 @@ const Dashboard = () => {
   const canClockIn = currentPosition !== null && status !== 'clocked_in' && geofenceCheck();
   const canClockOut = currentPosition !== null && status === 'clocked_in' && geofenceCheck();
 
+  // Show orphan user message if no company assigned
+  if (profile && !profile.company_id) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="container mx-auto max-w-2xl px-4 py-6">
+          <Card className="border-2 border-warning">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-warning">
+                <AlertTriangle className="h-5 w-5" />
+                Belum Terdaftar di Perusahaan
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">
+                Akun Anda belum terhubung ke perusahaan manapun. 
+                Silakan hubungi Admin untuk mendaftarkan Anda ke perusahaan.
+              </p>
+            </CardContent>
+          </Card>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -497,6 +522,31 @@ const Dashboard = () => {
                   longitude={currentPosition.longitude}
                   accuracy={currentPosition.accuracy}
                 />
+              ) : locationError ? (
+                <Card className="border-2 border-destructive bg-destructive/5">
+                  <CardContent className="py-6">
+                    <div className="flex flex-col items-center gap-4 text-center">
+                      <AlertTriangle className="h-10 w-10 text-destructive" />
+                      <div>
+                        <p className="font-medium text-destructive">GPS Tidak Tersedia</p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {locationError}
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-2">
+                          Pastikan GPS/Lokasi diaktifkan di pengaturan browser dan perangkat Anda.
+                        </p>
+                      </div>
+                      <Button
+                        onClick={refreshLocation}
+                        disabled={locationLoading}
+                        className="mt-2"
+                      >
+                        <RefreshCw className={`h-4 w-4 mr-2 ${locationLoading ? 'animate-spin' : ''}`} />
+                        Coba Lagi
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
               ) : (
                 <div className="w-full h-48 rounded-lg border-2 border-dashed border-foreground/20 flex items-center justify-center bg-muted">
                   <p className="text-muted-foreground text-sm">

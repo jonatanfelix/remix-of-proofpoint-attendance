@@ -72,6 +72,24 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Get requesting user's profile to fetch company_id
+    const { data: adminProfile, error: adminProfileError } = await supabaseAdmin
+      .from('profiles')
+      .select('company_id')
+      .eq('user_id', requestingUser.id)
+      .maybeSingle();
+
+    if (adminProfileError) {
+      console.error('Admin profile fetch error:', adminProfileError);
+      return new Response(
+        JSON.stringify({ error: 'Failed to fetch admin profile' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const adminCompanyId = adminProfile?.company_id;
+    console.log('Admin company_id:', adminCompanyId);
+
     // Parse request body
     const { email, password, fullName, role: newUserRole } = await req.json();
 
@@ -106,7 +124,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log('Creating user:', { email, fullName, role: newUserRole });
+    console.log('Creating user:', { email, fullName, role: newUserRole, company_id: adminCompanyId });
 
     // Create user using admin API
     const { data: createData, error: createError } = await supabaseAdmin.auth.admin.createUser({
@@ -139,19 +157,29 @@ Deno.serve(async (req) => {
       if (updateRoleError) {
         console.error('Update role error:', updateRoleError);
       }
+    }
 
-      // Also update in profiles
+    // Update profile with role and company_id from admin
+    const profileUpdate: { role?: string; company_id?: string } = {};
+    if (newUserRole !== 'employee') {
+      profileUpdate.role = newUserRole;
+    }
+    if (adminCompanyId) {
+      profileUpdate.company_id = adminCompanyId;
+    }
+
+    if (Object.keys(profileUpdate).length > 0) {
       const { error: updateProfileError } = await supabaseAdmin
         .from('profiles')
-        .update({ role: newUserRole })
+        .update(profileUpdate)
         .eq('user_id', newUser.id);
 
       if (updateProfileError) {
-        console.error('Update profile role error:', updateProfileError);
+        console.error('Update profile error:', updateProfileError);
       }
     }
 
-    console.log('User created successfully with role:', newUserRole);
+    console.log('User created successfully with role:', newUserRole, 'company_id:', adminCompanyId);
 
     return new Response(
       JSON.stringify({ 
@@ -159,7 +187,8 @@ Deno.serve(async (req) => {
         user: { 
           id: newUser.id, 
           email: newUser.email,
-          role: newUserRole 
+          role: newUserRole,
+          company_id: adminCompanyId
         } 
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
