@@ -133,6 +133,7 @@ export type Database = {
           end_date: string
           id: string
           leave_type: string
+          proof_url: string | null
           reason: string | null
           review_notes: string | null
           reviewed_at: string | null
@@ -147,6 +148,7 @@ export type Database = {
           end_date: string
           id?: string
           leave_type: string
+          proof_url?: string | null
           reason?: string | null
           review_notes?: string | null
           reviewed_at?: string | null
@@ -161,6 +163,7 @@ export type Database = {
           end_date?: string
           id?: string
           leave_type?: string
+          proof_url?: string | null
           reason?: string | null
           review_notes?: string | null
           reviewed_at?: string | null

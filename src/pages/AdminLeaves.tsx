@@ -33,7 +33,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { CalendarCheck, Clock, CheckCircle, XCircle, Search, Filter, Loader2 } from 'lucide-react';
+import { CalendarCheck, Clock, CheckCircle, XCircle, Search, Filter, Loader2, Image as ImageIcon, PartyPopper } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
@@ -47,6 +47,7 @@ interface LeaveRequestWithProfile {
   reason: string | null;
   status: string;
   review_notes: string | null;
+  proof_url: string | null;
   created_at: string;
   profiles: {
     full_name: string;
@@ -300,12 +301,12 @@ const AdminLeaves = () => {
                 <Button variant="outline" onClick={() => refetch()}>Coba Lagi</Button>
               </div>
             ) : !leaveRequests?.length ? (
-              <div className="flex flex-col items-center py-12 text-center">
-                <CalendarCheck className="h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="font-semibold text-lg mb-1">Tidak Ada Pengajuan</h3>
-                <p className="text-sm text-muted-foreground">
+              <div className="flex flex-col items-center py-16 text-center">
+                <PartyPopper className="h-16 w-16 text-primary mb-4" />
+                <h3 className="font-bold text-xl mb-2">All caught up! 🎉</h3>
+                <p className="text-muted-foreground max-w-md">
                   {statusFilter === 'pending' 
-                    ? 'Semua pengajuan sudah diproses! 🎉' 
+                    ? 'Tidak ada pengajuan yang menunggu persetujuan. Semua sudah diproses!' 
                     : 'Belum ada pengajuan izin dari karyawan.'}
                 </p>
               </div>
@@ -316,10 +317,10 @@ const AdminLeaves = () => {
                     <TableRow>
                       <TableHead>Tanggal Ajuan</TableHead>
                       <TableHead>Nama</TableHead>
-                      <TableHead>Departemen</TableHead>
                       <TableHead>Jenis</TableHead>
                       <TableHead>Periode</TableHead>
                       <TableHead>Alasan</TableHead>
+                      <TableHead>Bukti</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Aksi</TableHead>
                     </TableRow>
@@ -331,7 +332,6 @@ const AdminLeaves = () => {
                           {format(new Date(req.created_at), 'dd MMM yyyy', { locale: idLocale })}
                         </TableCell>
                         <TableCell>{req.profiles?.full_name || 'Unknown'}</TableCell>
-                        <TableCell>{req.profiles?.department || '-'}</TableCell>
                         <TableCell>{getLeaveTypeLabel(req.leave_type)}</TableCell>
                         <TableCell>
                           {format(new Date(req.start_date), 'dd MMM', { locale: idLocale })} -{' '}
@@ -339,6 +339,21 @@ const AdminLeaves = () => {
                         </TableCell>
                         <TableCell className="max-w-[150px] truncate">
                           {req.reason || '-'}
+                        </TableCell>
+                        <TableCell>
+                          {req.proof_url ? (
+                            <a 
+                              href={req.proof_url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-primary hover:underline"
+                            >
+                              <ImageIcon className="h-4 w-4" />
+                              Lihat
+                            </a>
+                          ) : (
+                            '-'
+                          )}
                         </TableCell>
                         <TableCell>{getStatusBadge(req.status)}</TableCell>
                         <TableCell>

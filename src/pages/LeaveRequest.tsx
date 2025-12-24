@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -24,10 +24,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { CalendarDays, Plus, Clock, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { CalendarDays, Plus, Clock, CheckCircle, XCircle, Loader2, Upload, X, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
+
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const ALLOWED_FILE_TYPES = ['image/jpeg', 'image/png', 'image/jpg'];
 
 interface LeaveRequest {
   id: string;
@@ -37,17 +40,22 @@ interface LeaveRequest {
   reason: string | null;
   status: string;
   review_notes: string | null;
+  proof_url: string | null;
   created_at: string;
 }
 
 const LeaveRequest = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [leaveType, setLeaveType] = useState<string>('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [reason, setReason] = useState('');
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofPreview, setProofPreview] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Fetch user's leave requests
   const { data: leaveRequests, isLoading } = useQuery({
@@ -65,6 +73,53 @@ const LeaveRequest = () => {
     },
     enabled: !!user?.id,
   });
+
+  // Handle file selection
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!ALLOWED_FILE_TYPES.includes(file.type)) {
+      toast.error('Format file tidak didukung. Gunakan JPG atau PNG.');
+      return;
+    }
+
+    // Validate file size
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error('Ukuran file maksimal 5MB');
+      return;
+    }
+
+    setProofFile(file);
+    setProofPreview(URL.createObjectURL(file));
+  };
+
+  const clearProofFile = () => {
+    setProofFile(null);
+    setProofPreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  // Upload file to storage
+  const uploadProofFile = async (file: File, userId: string): Promise<string | null> => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${userId}/${Date.now()}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('leave-proofs')
+      .upload(fileName, file);
+
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage
+      .from('leave-proofs')
+      .getPublicUrl(fileName);
+
+    return data.publicUrl;
+  };
 
   // Submit leave request
   const submitMutation = useMutation({
@@ -87,12 +142,25 @@ const LeaveRequest = () => {
         throw new Error('Tidak dapat mengajukan izin untuk tanggal yang sudah lewat');
       }
 
+      setIsUploading(true);
+
+      // Upload proof file if exists
+      let proofUrl: string | null = null;
+      if (proofFile) {
+        try {
+          proofUrl = await uploadProofFile(proofFile, user.id);
+        } catch (uploadErr) {
+          throw new Error('Gagal mengupload bukti. Coba lagi.');
+        }
+      }
+
       const { error } = await supabase.from('leave_requests').insert({
         user_id: user.id,
         leave_type: leaveType,
         start_date: startDate,
         end_date: endDate,
         reason: reason || null,
+        proof_url: proofUrl,
       });
 
       if (error) throw error;
@@ -104,9 +172,12 @@ const LeaveRequest = () => {
       setStartDate('');
       setEndDate('');
       setReason('');
+      clearProofFile();
+      setIsUploading(false);
     },
     onError: (error) => {
       toast.error(error.message || 'Gagal mengirim pengajuan');
+      setIsUploading(false);
     },
   });
 
@@ -206,16 +277,61 @@ const LeaveRequest = () => {
                     rows={3}
                   />
                 </div>
+                
+                {/* Photo Upload */}
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Bukti Pendukung (opsional)</Label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Format: JPG, PNG. Maks: 5MB
+                  </p>
+                  
+                  {proofPreview ? (
+                    <div className="relative inline-block">
+                      <img 
+                        src={proofPreview} 
+                        alt="Preview" 
+                        className="w-32 h-32 object-cover rounded-lg border-2 border-foreground"
+                      />
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="icon"
+                        className="absolute -top-2 -right-2 h-6 w-6"
+                        onClick={clearProofFile}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div
+                      className="border-2 border-dashed border-muted-foreground/50 rounded-lg p-6 text-center cursor-pointer hover:border-foreground transition-colors"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">
+                        Klik untuk upload bukti
+                      </p>
+                    </div>
+                  )}
+                  
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/jpg"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                </div>
               </div>
               <Button
                 type="submit"
-                disabled={submitMutation.isPending || !leaveType || !startDate || !endDate}
+                disabled={submitMutation.isPending || isUploading || !leaveType || !startDate || !endDate}
                 className="border-2 border-foreground w-full md:w-auto"
               >
-                {submitMutation.isPending ? (
+                {submitMutation.isPending || isUploading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Mengirim...
+                    {isUploading ? 'Mengupload...' : 'Mengirim...'}
                   </>
                 ) : (
                   <>
@@ -254,6 +370,7 @@ const LeaveRequest = () => {
                       <TableHead>Jenis</TableHead>
                       <TableHead>Periode</TableHead>
                       <TableHead>Alasan</TableHead>
+                      <TableHead>Bukti</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Catatan Admin</TableHead>
                     </TableRow>
@@ -271,6 +388,21 @@ const LeaveRequest = () => {
                         </TableCell>
                         <TableCell className="max-w-[200px] truncate">
                           {req.reason || '-'}
+                        </TableCell>
+                        <TableCell>
+                          {req.proof_url ? (
+                            <a 
+                              href={req.proof_url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-primary hover:underline"
+                            >
+                              <ImageIcon className="h-4 w-4" />
+                              Lihat
+                            </a>
+                          ) : (
+                            '-'
+                          )}
                         </TableCell>
                         <TableCell>{getStatusBadge(req.status)}</TableCell>
                         <TableCell className="max-w-[200px] truncate">
