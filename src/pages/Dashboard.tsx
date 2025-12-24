@@ -602,20 +602,15 @@ const Dashboard = () => {
 
                 {currentPosition && (
                   <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="border-2 border-foreground"
-                      onClick={() => {
-                        window.open(
-                          `https://www.google.com/maps/place/${currentPosition.latitude},${currentPosition.longitude}/@${currentPosition.latitude},${currentPosition.longitude},17z`,
-                          '_blank'
-                        );
-                      }}
+                    <a
+                      href={`https://www.google.com/maps/place/${currentPosition.latitude},${currentPosition.longitude}/@${currentPosition.latitude},${currentPosition.longitude},17z`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center h-9 px-3 text-sm font-medium border-2 border-foreground bg-background hover:bg-accent hover:text-accent-foreground rounded-md"
                     >
                       <ExternalLink className="h-4 w-4 mr-2" />
                       Buka di Google Maps
-                    </Button>
+                    </a>
                     <Button
                       variant="outline"
                       size="sm"
