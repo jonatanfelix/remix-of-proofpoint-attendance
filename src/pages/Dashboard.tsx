@@ -603,7 +603,7 @@ const Dashboard = () => {
                 {currentPosition && (
                   <div className="flex flex-wrap gap-2">
                     <a
-                      href={`https://www.google.com/maps/place/${currentPosition.latitude},${currentPosition.longitude}/@${currentPosition.latitude},${currentPosition.longitude},17z`}
+                      href={`https://www.google.com/maps/search/?api=1&query=${currentPosition.latitude},${currentPosition.longitude}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center justify-center h-9 px-3 text-sm font-medium border-2 border-foreground bg-background hover:bg-accent hover:text-accent-foreground rounded-md"
