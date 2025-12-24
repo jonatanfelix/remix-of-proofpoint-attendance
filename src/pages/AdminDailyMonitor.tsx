@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -26,8 +26,9 @@ import {
 } from '@/components/ui/select';
 import { 
   Users, Calendar, Clock, CheckCircle, XCircle, AlertTriangle, 
-  Palmtree, Coffee, Loader2, RefreshCw, Search, Filter 
+  Palmtree, Coffee, Loader2, RefreshCw, Search, Filter, Radio
 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import { format, parseISO } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
 
@@ -80,6 +81,8 @@ interface EmployeeWithStatus extends Employee {
   holidayName: string | null;
 }
 
+const REFRESH_INTERVAL = 30000; // 30 seconds
+
 const AdminDailyMonitor = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -88,6 +91,8 @@ const AdminDailyMonitor = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState(new Date());
 
   // Check if user is admin
   const { data: userRole, isLoading: roleLoading } = useQuery({
@@ -125,7 +130,7 @@ const AdminDailyMonitor = () => {
   });
 
   // Fetch all active employees with their shifts
-  const { data: employees, isLoading: employeesLoading } = useQuery({
+  const { data: employees, isLoading: employeesLoading, refetch: refetchEmployees } = useQuery({
     queryKey: ['active-employees'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -152,6 +157,7 @@ const AdminDailyMonitor = () => {
       return data as Employee[];
     },
     enabled: isAdminOrDeveloper,
+    refetchInterval: autoRefresh ? REFRESH_INTERVAL : false,
   });
 
   // Fetch attendance for selected date
@@ -168,9 +174,11 @@ const AdminDailyMonitor = () => {
         .lte('recorded_at', endOfDay);
 
       if (error) throw error;
+      setLastRefresh(new Date());
       return data as AttendanceRecord[];
     },
     enabled: isAdminOrDeveloper,
+    refetchInterval: autoRefresh ? REFRESH_INTERVAL : false,
   });
 
   // Fetch approved leaves that overlap with selected date
@@ -420,29 +428,63 @@ const AdminDailyMonitor = () => {
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container mx-auto max-w-7xl px-4 py-6 space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold">Monitoring Harian</h1>
-            <p className="text-muted-foreground">
-              {format(parseISO(selectedDate), 'EEEE, dd MMMM yyyy', { locale: idLocale })}
-            </p>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold">Monitoring Harian</h1>
+              <p className="text-muted-foreground">
+                {format(parseISO(selectedDate), 'EEEE, dd MMMM yyyy', { locale: idLocale })}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="w-auto border-2 border-foreground"
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => {
+                  refetchAttendance();
+                  refetchEmployees();
+                }}
+                className="border-2 border-foreground"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="w-auto border-2 border-foreground"
-            />
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => refetchAttendance()}
-              className="border-2 border-foreground"
-            >
-              <RefreshCw className="h-4 w-4" />
-            </Button>
-          </div>
+          
+          {/* Auto-refresh status bar */}
+          <Card className="border border-muted">
+            <CardContent className="py-3">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={autoRefresh}
+                      onCheckedChange={setAutoRefresh}
+                      id="auto-refresh"
+                    />
+                    <label htmlFor="auto-refresh" className="text-sm font-medium cursor-pointer">
+                      Auto-refresh
+                    </label>
+                  </div>
+                  {autoRefresh && (
+                    <Badge variant="outline" className="animate-pulse">
+                      <Radio className="h-3 w-3 mr-1 text-green-500" />
+                      Live setiap 30 detik
+                    </Badge>
+                  )}
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  Terakhir diperbarui: {format(lastRefresh, 'HH:mm:ss')}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Holiday Banner */}
