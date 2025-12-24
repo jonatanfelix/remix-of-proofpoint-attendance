@@ -1,4 +1,4 @@
-import { MapPin, LogOut, User, Shield, Home, Settings, Users, Code, CalendarDays, Calendar } from 'lucide-react';
+import { MapPin, LogOut, User, Shield, Home, Settings, Users, Code, CalendarDays, Calendar, LayoutDashboard } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -99,6 +99,18 @@ const Header = () => {
                   Rekap
                 </Link>
                 <Link
+                  to="/admin/daily"
+                  className={cn(
+                    'flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+                    location.pathname === '/admin/daily'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  )}
+                >
+                  <LayoutDashboard className="h-4 w-4" />
+                  Monitor
+                </Link>
+                <Link
                   to="/admin/employees"
                   className={cn(
                     'flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors',
@@ -188,6 +200,12 @@ const Header = () => {
                     <Link to="/admin">
                       <Shield className="mr-2 h-4 w-4" />
                       Rekap Absensi
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild className="cursor-pointer sm:hidden">
+                    <Link to="/admin/daily">
+                      <LayoutDashboard className="mr-2 h-4 w-4" />
+                      Monitor Harian
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild className="cursor-pointer sm:hidden">

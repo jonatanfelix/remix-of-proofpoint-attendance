@@ -12,6 +12,7 @@ import AdminSettings from "./pages/AdminSettings";
 import AdminEmployees from "./pages/AdminEmployees";
 import AdminLeaves from "./pages/AdminLeaves";
 import AdminHolidays from "./pages/AdminHolidays";
+import AdminDailyMonitor from "./pages/AdminDailyMonitor";
 import LeaveRequest from "./pages/LeaveRequest";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
@@ -88,6 +89,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <AdminHolidays />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/daily"
+              element={
+                <ProtectedRoute>
+                  <AdminDailyMonitor />
                 </ProtectedRoute>
               }
             />
