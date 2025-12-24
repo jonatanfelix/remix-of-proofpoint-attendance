@@ -11,6 +11,7 @@ interface StatusCardProps {
   lateMinutes?: number;
   workStartTime?: string;
   employeeType?: 'office' | 'field';
+  shiftName?: string;
 }
 
 const StatusCard = ({ 
@@ -20,7 +21,8 @@ const StatusCard = ({
   isLate,
   lateMinutes,
   workStartTime,
-  employeeType = 'office'
+  employeeType = 'office',
+  shiftName
 }: StatusCardProps) => {
   
   // Calculate work hours for field employees
@@ -66,7 +68,7 @@ const StatusCard = ({
           icon: <Clock className="h-8 w-8" />,
           title: 'Belum Hadir',
           subtitle: workStartTime 
-            ? `Jam masuk: ${workStartTime.slice(0, 5)}`
+            ? `Jam masuk${shiftName ? ` (${shiftName})` : ''}: ${workStartTime.slice(0, 5)}`
             : 'Clock in untuk memulai shift',
           bgClass: 'bg-muted',
         };

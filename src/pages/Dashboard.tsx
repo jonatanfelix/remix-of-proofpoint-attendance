@@ -23,11 +23,20 @@ interface AttendanceRecord {
   photo_url: string | null;
 }
 
+interface ShiftData {
+  id: string;
+  name: string;
+  start_time: string;
+  end_time: string;
+}
+
 interface ProfileData {
   full_name: string;
   requires_geofence: boolean;
   company_id: string | null;
   employee_type: 'office' | 'field';
+  shift_id: string | null;
+  shift?: ShiftData | null;
 }
 
 interface CompanySettings {
@@ -77,14 +86,21 @@ const Dashboard = () => {
   const [showCamera, setShowCamera] = useState(false);
   const [pendingRecordType, setPendingRecordType] = useState<'clock_in' | 'clock_out' | null>(null);
 
-  // Fetch user profile with geofence settings
+  // Fetch user profile with geofence settings and shift info
   const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ['profile', user?.id],
     queryFn: async () => {
       if (!user?.id) return null;
       const { data, error } = await supabase
         .from('profiles')
-        .select('full_name, requires_geofence, company_id, employee_type')
+        .select(`
+          full_name, 
+          requires_geofence, 
+          company_id, 
+          employee_type, 
+          shift_id,
+          shift:shifts(id, name, start_time, end_time)
+        `)
         .eq('user_id', user.id)
         .maybeSingle();
 
@@ -167,12 +183,24 @@ const Dashboard = () => {
   const lastClockIn = recentRecords?.find((r) => r.record_type === 'clock_in');
   const lastClockOut = recentRecords?.find((r) => r.record_type === 'clock_out');
 
+  // Get effective work start time: prefer user's shift, fallback to company default
+  const effectiveWorkStartTime = useMemo(() => {
+    // Priority 1: User's assigned shift start_time
+    if (profile?.shift?.start_time) {
+      return profile.shift.start_time;
+    }
+    // Priority 2: Company default work_start_time
+    if (company?.work_start_time) {
+      return company.work_start_time;
+    }
+    // Fallback: 08:00
+    return '08:00:00';
+  }, [profile?.shift?.start_time, company?.work_start_time]);
+
   // Calculate lateness based on existing clock-in or current time for new clock-in
   const calculateLateness = useCallback((checkCurrentTime: boolean = false) => {
-    if (!company?.work_start_time) return { isLate: false, lateMinutes: 0 };
-
     const now = new Date();
-    const [hours, minutes] = company.work_start_time.split(':').map(Number);
+    const [hours, minutes] = effectiveWorkStartTime.split(':').map(Number);
     
     const workStartToday = new Date(now);
     workStartToday.setHours(hours, minutes, 0, 0);
@@ -198,7 +226,7 @@ const Dashboard = () => {
       isLate: diffMinutes > 0,
       lateMinutes: diffMinutes > 0 ? diffMinutes : 0,
     };
-  }, [todayClockIn, company?.work_start_time]);
+  }, [todayClockIn, effectiveWorkStartTime]);
 
   // For status card - show lateness from existing record
   const { isLate, lateMinutes } = calculateLateness(false);
@@ -469,8 +497,9 @@ const Dashboard = () => {
             lastClockOut={lastClockOut ? new Date(lastClockOut.recorded_at) : null}
             isLate={isLate}
             lateMinutes={lateMinutes}
-            workStartTime={company?.work_start_time}
+            workStartTime={effectiveWorkStartTime}
             employeeType={profile?.employee_type || 'office'}
+            shiftName={profile?.shift?.name}
           />
 
           {/* Geofence Status Banner */}

@@ -132,7 +132,7 @@ const AdminEmployees = () => {
   });
 
   // Fetch all employees with shift info
-  const { data: employees, isLoading: employeesLoading } = useQuery({
+  const { data: employees, isLoading: employeesLoading, isError: employeesError, refetch: refetchEmployees } = useQuery({
     queryKey: ['admin-employees'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -361,6 +361,31 @@ const AdminEmployees = () => {
           <div className="flex items-center justify-center h-64">
             <div className="text-muted-foreground">Memuat...</div>
           </div>
+        </main>
+      </div>
+    );
+  }
+
+  // Error state
+  if (employeesError) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="container mx-auto p-4">
+          <Card className="border-2 border-destructive/50 bg-destructive/5">
+            <CardContent className="py-8">
+              <div className="flex flex-col items-center text-center gap-4">
+                <Users className="h-12 w-12 text-destructive" />
+                <div>
+                  <h3 className="font-semibold mb-1">Gagal Memuat Data Karyawan</h3>
+                  <p className="text-sm text-muted-foreground">Terjadi kesalahan saat mengambil data. Periksa koneksi internet Anda.</p>
+                </div>
+                <Button onClick={() => refetchEmployees()}>
+                  Coba Lagi
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </main>
       </div>
     );

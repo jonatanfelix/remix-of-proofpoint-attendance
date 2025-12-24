@@ -87,7 +87,7 @@ const AdminLeaves = () => {
   const isAdminOrDeveloper = userRole === 'admin' || userRole === 'developer';
 
   // Fetch leave requests
-  const { data: leaveRequests, isLoading } = useQuery({
+  const { data: leaveRequests, isLoading, isError, refetch } = useQuery({
     queryKey: ['admin-leave-requests', searchTerm, statusFilter],
     queryFn: async () => {
       // First get leave requests
@@ -294,10 +294,21 @@ const AdminLeaves = () => {
               <div className="flex justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
+            ) : isError ? (
+              <div className="flex flex-col items-center py-8 gap-4">
+                <p className="text-destructive">Gagal memuat data pengajuan</p>
+                <Button variant="outline" onClick={() => refetch()}>Coba Lagi</Button>
+              </div>
             ) : !leaveRequests?.length ? (
-              <p className="text-center py-8 text-muted-foreground">
-                Tidak ada pengajuan
-              </p>
+              <div className="flex flex-col items-center py-12 text-center">
+                <CalendarCheck className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="font-semibold text-lg mb-1">Tidak Ada Pengajuan</h3>
+                <p className="text-sm text-muted-foreground">
+                  {statusFilter === 'pending' 
+                    ? 'Semua pengajuan sudah diproses! 🎉' 
+                    : 'Belum ada pengajuan izin dari karyawan.'}
+                </p>
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
