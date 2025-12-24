@@ -10,18 +10,31 @@ type GoogleMapsLinkProps = {
   title?: string;
 };
 
-const normalizeLatLngQuery = (query: string) => {
-  const parts = query.split(",").map((p) => p.trim()).filter(Boolean);
-  if (parts.length >= 2) return `${parts[0]},${parts[1]}`;
-  return query.trim();
+const parseLatLng = (query: string): { latitude: number; longitude: number } | null => {
+  const parts = query
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  if (parts.length < 2) return null;
+
+  const latitude = Number(parts[0]);
+  const longitude = Number(parts[1]);
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  // Per requirement: treat 0 as invalid (avoid null/0 placeholders)
+  if (latitude === 0 || longitude === 0) return null;
+
+  return { latitude, longitude };
 };
 
 const GoogleMapsLink = ({ query, children, className, title }: GoogleMapsLinkProps) => {
-  const normalized = normalizeLatLngQuery(query);
+  const coords = parseLatLng(query);
+  if (!coords) return null;
 
   return (
     <a
-      href={`https://www.google.com/maps/search/?api=1&query=${normalized}`}
+      href={`https://www.google.com/maps?q=${coords.latitude},${coords.longitude}`}
       target="_blank"
       rel="noopener noreferrer"
       className={cn(className)}
