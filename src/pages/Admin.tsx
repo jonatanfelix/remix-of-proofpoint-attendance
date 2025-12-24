@@ -17,7 +17,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Download, Search, Calendar, Users, Clock, MapPin, Image, Copy } from 'lucide-react';
+import { Download, Search, Calendar, Users, Clock, MapPin, Image, Copy, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
@@ -454,18 +454,30 @@ const Admin = () => {
                           </TableCell>
                           <TableCell>
                             {record.clockInLocation ? (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(record.clockInLocation!);
-                                  toast.success('Koordinat disalin!');
-                                }}
-                                title={record.clockInLocation}
-                              >
-                                <Copy className="h-4 w-4 mr-1" />
-                                {record.clockInLocation}
-                              </Button>
+                              <div className="flex items-center gap-1">
+                                <a
+                                  href={`https://www.google.com/maps/search/?api=1&query=${record.clockInLocation}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center text-sm text-primary hover:underline"
+                                  title="Buka di Google Maps"
+                                >
+                                  <ExternalLink className="h-3 w-3 mr-1" />
+                                  Maps
+                                </a>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-1"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(record.clockInLocation!);
+                                    toast.success('Koordinat disalin!');
+                                  }}
+                                  title={record.clockInLocation}
+                                >
+                                  <Copy className="h-3 w-3" />
+                                </Button>
+                              </div>
                             ) : (
                               <span className="text-muted-foreground">-</span>
                             )}
@@ -493,18 +505,30 @@ const Admin = () => {
                           </TableCell>
                           <TableCell>
                             {record.clockOutLocation ? (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(record.clockOutLocation!);
-                                  toast.success('Koordinat disalin!');
-                                }}
-                                title={record.clockOutLocation}
-                              >
-                                <Copy className="h-4 w-4 mr-1" />
-                                {record.clockOutLocation}
-                              </Button>
+                              <div className="flex items-center gap-1">
+                                <a
+                                  href={`https://www.google.com/maps/search/?api=1&query=${record.clockOutLocation}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center text-sm text-primary hover:underline"
+                                  title="Buka di Google Maps"
+                                >
+                                  <ExternalLink className="h-3 w-3 mr-1" />
+                                  Maps
+                                </a>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-1"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(record.clockOutLocation!);
+                                    toast.success('Koordinat disalin!');
+                                  }}
+                                  title={record.clockOutLocation}
+                                >
+                                  <Copy className="h-3 w-3" />
+                                </Button>
+                              </div>
                             ) : (
                               <span className="text-muted-foreground">-</span>
                             )}
