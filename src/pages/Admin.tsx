@@ -18,7 +18,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Download, Search, Calendar, Users, Clock, MapPin, Image, Copy, ExternalLink } from 'lucide-react';
+import { Download, Search, Calendar, Users, Clock, MapPin, Image, Copy, ExternalLink, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
@@ -60,6 +60,7 @@ const Admin = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
 
   // Check if user is admin
   const { data: userRole, isLoading: roleLoading } = useQuery({
@@ -80,6 +81,20 @@ const Admin = () => {
 
   const isAdminOrDeveloper = userRole === 'admin' || userRole === 'developer';
 
+  // Get user profile for audit logging
+  const { data: userProfile } = useQuery({
+    queryKey: ['user-profile', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return null;
+      const { data } = await supabase
+        .from('profiles')
+        .select('full_name, email, company_id')
+        .eq('user_id', user.id)
+        .single();
+      return data;
+    },
+    enabled: !!user?.id,
+  });
   // Fetch all attendance records (admin only)
   const { data: records, isLoading: recordsLoading } = useQuery({
     queryKey: ['admin-attendance', searchTerm, startDate, endDate],
@@ -207,58 +222,95 @@ const Admin = () => {
     });
   };
 
-  const exportToXLSX = () => {
+  const exportToXLSX = async () => {
     if (!records || records.length === 0) return;
 
-    const dailyData = transformToDaily(records);
+    setIsExporting(true);
+    try {
+      const dailyData = transformToDaily(records);
+      const exportedBy = userProfile?.full_name || user?.email || 'Unknown';
+      const exportDate = format(new Date(), 'dd-MM-yyyy HH:mm:ss');
 
-    // Create worksheet data
-    const wsData = [
-      ['Tanggal', 'Nama', 'Scan Masuk', 'Bukti Foto (Masuk)', 'Bukti Lokasi (Masuk)', 'Scan Pulang', 'Bukti Foto (Pulang)', 'Bukti Lokasi (Pulang)'],
-      ...dailyData.map((row) => [
-        row.date,
-        row.name,
-        row.clockInTime || '-',
-        row.clockInPhoto || '-',
-        row.clockInLocation || '-',
-        row.clockOutTime || '-',
-        row.clockOutPhoto || '-',
-        row.clockOutLocation || '-',
-      ]),
-    ];
+      // Create worksheet data with watermark header
+      const wsData = [
+        // Watermark rows
+        [`Laporan Absensi - GeoAttend`],
+        [`Diekspor oleh: ${exportedBy}`],
+        [`Tanggal export: ${exportDate}`],
+        [`Periode: ${startDate || 'Semua'} s/d ${endDate || 'Semua'}`],
+        [], // Empty row
+        // Header
+        ['Tanggal', 'Nama', 'Scan Masuk', 'Bukti Foto (Masuk)', 'Bukti Lokasi (Masuk)', 'Scan Pulang', 'Bukti Foto (Pulang)', 'Bukti Lokasi (Pulang)'],
+        // Data rows
+        ...dailyData.map((row) => [
+          row.date,
+          row.name,
+          row.clockInTime || '-',
+          row.clockInPhoto || '-',
+          row.clockInLocation || '-',
+          row.clockOutTime || '-',
+          row.clockOutPhoto || '-',
+          row.clockOutLocation || '-',
+        ]),
+      ];
 
-    // Create workbook and worksheet
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
+      // Create workbook and worksheet
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
 
-    // Set column widths
-    ws['!cols'] = [
-      { wch: 12 }, // Tanggal
-      { wch: 20 }, // Nama
-      { wch: 12 }, // Scan Masuk
-      { wch: 50 }, // Bukti Foto (Masuk)
-      { wch: 25 }, // Bukti Lokasi (Masuk)
-      { wch: 12 }, // Scan Pulang
-      { wch: 50 }, // Bukti Foto (Pulang)
-      { wch: 25 }, // Bukti Lokasi (Pulang)
-    ];
+      // Set column widths
+      ws['!cols'] = [
+        { wch: 12 }, // Tanggal
+        { wch: 20 }, // Nama
+        { wch: 12 }, // Scan Masuk
+        { wch: 50 }, // Bukti Foto (Masuk)
+        { wch: 25 }, // Bukti Lokasi (Masuk)
+        { wch: 12 }, // Scan Pulang
+        { wch: 50 }, // Bukti Foto (Pulang)
+        { wch: 25 }, // Bukti Lokasi (Pulang)
+      ];
 
-    XLSX.utils.book_append_sheet(wb, ws, 'Absensi');
+      XLSX.utils.book_append_sheet(wb, ws, 'Absensi');
 
-    // Generate filename with date range - dynamic naming
-    let fileName = 'Attendance_Report';
-    if (startDate && endDate) {
-      fileName = `Attendance_Report_${startDate}_to_${endDate}`;
-    } else if (startDate) {
-      fileName = `Attendance_Report_from_${startDate}`;
-    } else if (endDate) {
-      fileName = `Attendance_Report_until_${endDate}`;
-    } else {
-      fileName = `Attendance_Report_${format(new Date(), 'yyyy-MM-dd')}`;
+      // Generate filename with date range - dynamic naming
+      let fileName = 'Attendance_Report';
+      if (startDate && endDate) {
+        fileName = `Attendance_Report_${startDate}_to_${endDate}`;
+      } else if (startDate) {
+        fileName = `Attendance_Report_from_${startDate}`;
+      } else if (endDate) {
+        fileName = `Attendance_Report_until_${endDate}`;
+      } else {
+        fileName = `Attendance_Report_${format(new Date(), 'yyyy-MM-dd')}`;
+      }
+
+      // Log audit event for export
+      await supabase.rpc('log_audit_event', {
+        p_user_id: user?.id,
+        p_user_email: userProfile?.email || user?.email,
+        p_user_role: userRole,
+        p_company_id: userProfile?.company_id,
+        p_action: 'export_data',
+        p_resource_type: 'attendance_report',
+        p_resource_id: fileName,
+        p_details: {
+          start_date: startDate || null,
+          end_date: endDate || null,
+          record_count: dailyData.length,
+          search_term: searchTerm || null,
+        },
+        p_ip_address: null,
+        p_user_agent: navigator.userAgent,
+      });
+      
+      XLSX.writeFile(wb, `${fileName}.xlsx`);
+      toast.success(`Data diekspor: ${fileName}.xlsx`);
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Gagal mengekspor data');
+    } finally {
+      setIsExporting(false);
     }
-    
-    XLSX.writeFile(wb, `${fileName}.xlsx`);
-    toast.success(`Data diekspor: ${fileName}.xlsx`);
   };
 
   if (roleLoading) {
@@ -303,8 +355,12 @@ const Admin = () => {
               <h1 className="text-2xl font-bold">Admin Dashboard</h1>
               <p className="text-muted-foreground">Kelola data absensi karyawan</p>
             </div>
-            <Button onClick={exportToXLSX} disabled={!records?.length} className="border-2 border-foreground">
-              <Download className="h-4 w-4 mr-2" />
+            <Button onClick={exportToXLSX} disabled={!records?.length || isExporting} className="border-2 border-foreground">
+              {isExporting ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4 mr-2" />
+              )}
               Export XLSX
             </Button>
           </div>

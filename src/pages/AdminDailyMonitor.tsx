@@ -25,11 +25,13 @@ import {
 } from '@/components/ui/select';
 import { 
   Users, Calendar, Clock, CheckCircle, XCircle, AlertTriangle, 
-  Palmtree, Coffee, Loader2, RefreshCw, Search, Filter, Radio
+  Palmtree, Coffee, Loader2, RefreshCw, Search, Filter, Radio, Download
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { format, parseISO, startOfDay, endOfDay } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
+import { toast } from 'sonner';
+import * as XLSX from 'xlsx';
 
 interface Employee {
   id: string;
@@ -91,6 +93,7 @@ const AdminDailyMonitor = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Check if user is admin
   const { data: userRole, isLoading: roleLoading } = useQuery({
@@ -110,6 +113,21 @@ const AdminDailyMonitor = () => {
   });
 
   const isAdminOrDeveloper = userRole === 'admin' || userRole === 'developer';
+
+  // Get user profile for audit logging
+  const { data: userProfile } = useQuery({
+    queryKey: ['user-profile', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return null;
+      const { data } = await supabase
+        .from('profiles')
+        .select('full_name, email, company_id')
+        .eq('user_id', user.id)
+        .single();
+      return data;
+    },
+    enabled: !!user?.id,
+  });
 
   // Fetch company settings for work start time
   const { data: company } = useQuery({
@@ -411,6 +429,90 @@ const AdminDailyMonitor = () => {
     }
   };
 
+  const getStatusLabel = (status: EmployeeStatus) => {
+    switch (status) {
+      case 'on_time': return 'Tepat Waktu';
+      case 'late': return 'Terlambat';
+      case 'on_leave': return 'Cuti/Izin';
+      case 'holiday': return 'Libur';
+      case 'absent': return 'Tidak Hadir';
+      case 'not_yet': return 'Belum Absen';
+      default: return status;
+    }
+  };
+
+  const exportDailyToXLSX = async () => {
+    if (!filteredEmployees || filteredEmployees.length === 0) return;
+
+    setIsExporting(true);
+    try {
+      const exportedBy = userProfile?.full_name || user?.email || 'Unknown';
+      const exportDate = format(new Date(), 'dd-MM-yyyy HH:mm:ss');
+      const formattedDate = format(parseISO(selectedDate), 'EEEE, dd MMMM yyyy', { locale: idLocale });
+
+      // Create worksheet data with watermark
+      const wsData = [
+        [`Laporan Monitoring Harian - GeoAttend`],
+        [`Tanggal: ${formattedDate}`],
+        [`Diekspor oleh: ${exportedBy}`],
+        [`Waktu export: ${exportDate}`],
+        [],
+        ['Nama', 'Email', 'Departemen', 'Shift', 'Status', 'Clock In', 'Clock Out', 'Keterangan'],
+        ...filteredEmployees.map((emp) => [
+          emp.full_name,
+          emp.email,
+          emp.department || '-',
+          emp.shifts?.name || '-',
+          getStatusLabel(emp.status),
+          emp.clockInTime || '-',
+          emp.clockOutTime || '-',
+          emp.status === 'late' ? `Terlambat ${emp.lateMinutes} menit` :
+          emp.status === 'on_leave' ? getLeaveTypeLabel(emp.leaveType || '') :
+          emp.status === 'holiday' ? emp.holidayName : '-'
+        ]),
+      ];
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+      ws['!cols'] = [
+        { wch: 25 }, { wch: 30 }, { wch: 15 }, { wch: 20 },
+        { wch: 15 }, { wch: 10 }, { wch: 10 }, { wch: 25 },
+      ];
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Daily Monitor');
+
+      const fileName = `Daily_Monitor_${selectedDate}`;
+
+      // Log audit event
+      await supabase.rpc('log_audit_event', {
+        p_user_id: user?.id,
+        p_user_email: userProfile?.email || user?.email,
+        p_user_role: userRole,
+        p_company_id: userProfile?.company_id,
+        p_action: 'export_data',
+        p_resource_type: 'daily_monitor',
+        p_resource_id: fileName,
+        p_details: {
+          date: selectedDate,
+          record_count: filteredEmployees.length,
+          status_filter: statusFilter,
+          department_filter: departmentFilter,
+        },
+        p_ip_address: null,
+        p_user_agent: navigator.userAgent,
+      });
+
+      XLSX.writeFile(wb, `${fileName}.xlsx`);
+      toast.success(`Data diekspor: ${fileName}.xlsx`);
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Gagal mengekspor data');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   if (roleLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -467,6 +569,18 @@ const AdminDailyMonitor = () => {
                 className="border-2 border-foreground"
               >
                 <RefreshCw className="h-4 w-4" />
+              </Button>
+              <Button
+                onClick={exportDailyToXLSX}
+                disabled={!filteredEmployees?.length || isExporting}
+                className="border-2 border-foreground"
+              >
+                {isExporting ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4 mr-2" />
+                )}
+                Export
               </Button>
             </div>
           </div>
