@@ -1,4 +1,4 @@
-import { MapPin, LogOut, User, Shield, Home, Settings, Users, Code, CalendarDays, Calendar, LayoutDashboard } from 'lucide-react';
+import { MapPin, LogOut, User, Shield, Home, Settings, Users, Code, CalendarDays, Calendar, LayoutDashboard, FileText } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -147,6 +147,18 @@ const Header = () => {
                   Libur
                 </Link>
                 <Link
+                  to="/admin/audit-logs"
+                  className={cn(
+                    'flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+                    location.pathname === '/admin/audit-logs'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  )}
+                >
+                  <FileText className="h-4 w-4" />
+                  Audit
+                </Link>
+                <Link
                   to="/admin/settings"
                   className={cn(
                     'flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors',
@@ -230,6 +242,12 @@ const Header = () => {
                     <Link to="/admin/settings">
                       <Settings className="mr-2 h-4 w-4" />
                       Settings
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild className="cursor-pointer sm:hidden">
+                    <Link to="/admin/audit-logs">
+                      <FileText className="mr-2 h-4 w-4" />
+                      Audit Logs
                     </Link>
                   </DropdownMenuItem>
                 </>

@@ -289,7 +289,7 @@ const Dashboard = () => {
     }
   };
 
-  // Clock in/out mutation
+  // Clock in/out mutation - now uses backend edge function for security
   const attendanceMutation = useMutation({
     mutationFn: async ({ recordType, photoUrl }: { recordType: 'clock_in' | 'clock_out'; photoUrl: string | null }) => {
       if (!user?.id || !currentPosition) {
@@ -300,27 +300,34 @@ const Dashboard = () => {
         throw new Error('Foto wajib diambil untuk absensi.');
       }
 
-      const { error } = await supabase.from('attendance_records').insert({
-        user_id: user.id,
-        location_id: null,
-        record_type: recordType,
-        latitude: currentPosition.latitude,
-        longitude: currentPosition.longitude,
-        accuracy_meters: currentPosition.accuracy,
-        recorded_at: new Date().toISOString(),
-        photo_url: photoUrl,
+      // Call backend edge function for secure validation
+      const { data, error } = await supabase.functions.invoke('clock-attendance', {
+        body: {
+          record_type: recordType,
+          latitude: currentPosition.latitude,
+          longitude: currentPosition.longitude,
+          accuracy_meters: currentPosition.accuracy,
+          photo_url: photoUrl,
+        },
       });
 
       if (error) throw error;
+      
+      // Check for business logic errors from edge function
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      return data;
     },
-    onSuccess: (_, { recordType }) => {
+    onSuccess: (data, { recordType }) => {
       queryClient.invalidateQueries({ queryKey: ['attendance-records'] });
       toast({
         title: recordType === 'clock_in' ? 'Berhasil Clock In!' : 'Berhasil Clock Out!',
         description: `Tercatat pada ${new Date().toLocaleTimeString()}`,
       });
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({
         title: 'Error',
         description: error.message || 'Gagal mencatat absensi',

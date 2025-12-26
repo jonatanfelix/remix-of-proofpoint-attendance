@@ -137,9 +137,24 @@ const AdminLeaves = () => {
     enabled: isAdminOrDeveloper,
   });
 
-  // Review mutation
+  // Get user profile for audit logging
+  const { data: userProfile } = useQuery({
+    queryKey: ['user-profile', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return null;
+      const { data } = await supabase
+        .from('profiles')
+        .select('email, company_id')
+        .eq('user_id', user.id)
+        .single();
+      return data;
+    },
+    enabled: !!user?.id,
+  });
+
+  // Review mutation with audit logging
   const reviewMutation = useMutation({
-    mutationFn: async ({ id, status, notes }: { id: string; status: string; notes: string }) => {
+    mutationFn: async ({ id, status, notes, requestData }: { id: string; status: string; notes: string; requestData: LeaveRequestWithProfile }) => {
       const { error } = await supabase
         .from('leave_requests')
         .update({
@@ -151,6 +166,26 @@ const AdminLeaves = () => {
         .eq('id', id);
 
       if (error) throw error;
+
+      // Log audit event
+      await supabase.rpc('log_audit_event', {
+        p_user_id: user?.id,
+        p_user_email: userProfile?.email || user?.email,
+        p_user_role: userRole,
+        p_company_id: userProfile?.company_id,
+        p_action: status === 'approved' ? 'approve_leave' : 'reject_leave',
+        p_resource_type: 'leave_request',
+        p_resource_id: id,
+        p_details: {
+          employee_name: requestData.profiles?.full_name,
+          leave_type: requestData.leave_type,
+          start_date: requestData.start_date,
+          end_date: requestData.end_date,
+          review_notes: notes,
+        },
+        p_ip_address: null,
+        p_user_agent: navigator.userAgent,
+      });
     },
     onSuccess: (_, { status }) => {
       queryClient.invalidateQueries({ queryKey: ['admin-leave-requests'] });
@@ -177,6 +212,7 @@ const AdminLeaves = () => {
       id: selectedRequest.id,
       status: actionType === 'approve' ? 'approved' : 'rejected',
       notes: reviewNotes,
+      requestData: selectedRequest,
     });
   };
 
