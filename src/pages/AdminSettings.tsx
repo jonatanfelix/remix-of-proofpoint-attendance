@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
-import Header from '@/components/layout/Header';
+import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -422,14 +422,13 @@ const AdminSettings = () => {
   // Loading state
   if (roleLoading || companyLoading) {
     return (
-      <div className="min-h-screen bg-background">
-        <Header />
-        <main className="container mx-auto p-4">
+      <AppLayout>
+        <div className="container mx-auto p-4">
           <div className="flex items-center justify-center h-64">
             <div className="text-muted-foreground">Memuat...</div>
           </div>
-        </main>
-      </div>
+        </div>
+      </AppLayout>
     );
   }
 
@@ -440,9 +439,8 @@ const AdminSettings = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      <main className="container mx-auto p-4 space-y-6">
+    <AppLayout>
+      <div className="container mx-auto p-4 space-y-6">
         <div>
           <h1 className="text-2xl font-bold">Pengaturan Perusahaan</h1>
           <p className="text-muted-foreground">Konfigurasi lokasi kantor dan jam kerja</p>
@@ -771,8 +769,8 @@ const AdminSettings = () => {
             {updateMutation.isPending ? 'Menyimpan...' : 'Simpan Pengaturan'}
           </Button>
         </div>
-      </main>
-    </div>
+      </div>
+    </AppLayout>
   );
 };
 

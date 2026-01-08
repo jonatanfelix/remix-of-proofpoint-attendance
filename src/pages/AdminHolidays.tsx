@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
-import Header from '@/components/layout/Header';
+import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -182,17 +182,16 @@ const AdminHolidays = () => {
 
   if (!isAdminOrDeveloper) {
     return (
-      <div className="min-h-screen bg-background">
-        <Header />
-        <main className="container mx-auto max-w-2xl px-4 py-6">
+      <AppLayout>
+        <div className="container mx-auto max-w-2xl px-4 py-6">
           <Card>
             <CardContent className="py-8 text-center">
               <p className="text-destructive mb-4">Akses Ditolak</p>
               <Button onClick={() => navigate('/')}>Kembali ke Dashboard</Button>
             </CardContent>
           </Card>
-        </main>
-      </div>
+        </div>
+      </AppLayout>
     );
   }
 
@@ -202,9 +201,8 @@ const AdminHolidays = () => {
   const pastHolidays = holidays?.filter((h) => h.date < today) || [];
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      <main className="container mx-auto max-w-4xl px-4 py-6 space-y-6">
+    <AppLayout>
+      <div className="container mx-auto max-w-4xl px-4 py-6 space-y-6">
         <div>
           <h1 className="text-2xl font-bold">Kelola Hari Libur</h1>
           <p className="text-muted-foreground">Tambah dan kelola hari libur perusahaan</p>
@@ -434,8 +432,8 @@ const AdminHolidays = () => {
             </CardContent>
           </Card>
         )}
-      </main>
-    </div>
+      </div>
+    </AppLayout>
   );
 };
 

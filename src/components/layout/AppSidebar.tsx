@@ -1,4 +1,4 @@
-import { Clock, LayoutDashboard, History, CalendarDays, Users, Settings, LogOut } from 'lucide-react';
+import { Clock, LayoutDashboard, History, CalendarDays, Users, Settings, LogOut, Shield, Calendar, FileText, LayoutGrid } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery } from '@tanstack/react-query';
@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 
 const userMenuItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
@@ -26,7 +27,12 @@ const userMenuItems = [
 ];
 
 const adminMenuItems = [
-  { title: 'Manage Users', url: '/admin/employees', icon: Users },
+  { title: 'Rekap', url: '/admin', icon: Shield },
+  { title: 'Monitor', url: '/admin/daily', icon: LayoutGrid },
+  { title: 'Karyawan', url: '/admin/employees', icon: Users },
+  { title: 'Izin', url: '/admin/leaves', icon: CalendarDays },
+  { title: 'Libur', url: '/admin/holidays', icon: Calendar },
+  { title: 'Audit', url: '/admin/audit-logs', icon: FileText },
   { title: 'Settings', url: '/admin/settings', icon: Settings },
 ];
 
@@ -75,8 +81,18 @@ export function AppSidebar() {
     ? profile.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
     : user?.email?.slice(0, 2).toUpperCase() || 'U';
 
+  const getRoleBadge = () => {
+    if (userRole === 'developer') {
+      return <Badge variant="default" className="text-xs">Developer</Badge>;
+    }
+    if (userRole === 'admin') {
+      return <Badge variant="secondary" className="text-xs">Admin</Badge>;
+    }
+    return null;
+  };
+
   return (
-    <Sidebar className="border-r border-sidebar-border">
+    <Sidebar className="border-r border-sidebar-border bg-sidebar">
       {/* Header - Logo */}
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <Link to="/" className="flex items-center gap-3">
@@ -158,10 +174,13 @@ export function AppSidebar() {
               </AvatarFallback>
             </Avatar>
             <div className="flex flex-col min-w-0">
-              <span className="text-sm font-medium text-sidebar-foreground truncate max-w-[120px]">
-                {profile?.full_name || 'User'}
-              </span>
-              <span className="text-xs text-sidebar-foreground/50 truncate max-w-[120px]">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-sidebar-foreground truncate max-w-[100px]">
+                  {profile?.full_name || 'User'}
+                </span>
+                {getRoleBadge()}
+              </div>
+              <span className="text-xs text-sidebar-foreground/50 truncate max-w-[140px]">
                 {user?.email}
               </span>
             </div>

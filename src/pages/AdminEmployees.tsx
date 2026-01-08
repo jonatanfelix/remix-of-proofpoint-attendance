@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
-import Header from '@/components/layout/Header';
+import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -355,23 +355,21 @@ const AdminEmployees = () => {
   // Loading state
   if (roleLoading || employeesLoading) {
     return (
-      <div className="min-h-screen bg-background">
-        <Header />
-        <main className="container mx-auto p-4">
+      <AppLayout>
+        <div className="container mx-auto p-4">
           <div className="flex items-center justify-center h-64">
             <div className="text-muted-foreground">Memuat...</div>
           </div>
-        </main>
-      </div>
+        </div>
+      </AppLayout>
     );
   }
 
   // Error state
   if (employeesError) {
     return (
-      <div className="min-h-screen bg-background">
-        <Header />
-        <main className="container mx-auto p-4">
+      <AppLayout>
+        <div className="container mx-auto p-4">
           <Card className="border-2 border-destructive/50 bg-destructive/5">
             <CardContent className="py-8">
               <div className="flex flex-col items-center text-center gap-4">
@@ -386,8 +384,8 @@ const AdminEmployees = () => {
               </div>
             </CardContent>
           </Card>
-        </main>
-      </div>
+        </div>
+      </AppLayout>
     );
   }
 
@@ -398,9 +396,8 @@ const AdminEmployees = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      <main className="container mx-auto p-4 space-y-6">
+    <AppLayout>
+      <div className="container mx-auto p-4 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold">Manajemen Karyawan</h1>
@@ -654,7 +651,7 @@ const AdminEmployees = () => {
             </div>
           </CardContent>
         </Card>
-      </main>
+      </div>
 
       {/* Edit Dialog */}
       <Dialog open={!!editingEmployee} onOpenChange={() => setEditingEmployee(null)}>
@@ -915,7 +912,7 @@ const AdminEmployees = () => {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </AppLayout>
   );
 };
 

@@ -49,6 +49,14 @@ const App = () => (
                 }
               />
               <Route
+                path="/history"
+                element={
+                  <ProtectedRoute>
+                    <Clock />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/profile"
                 element={
                   <ProtectedRoute>
