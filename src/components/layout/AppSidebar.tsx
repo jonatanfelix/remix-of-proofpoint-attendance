@@ -1,4 +1,4 @@
-import { Clock, LayoutDashboard, History, CalendarDays, Users, Settings, LogOut, Shield, Calendar, FileText, LayoutGrid, PanelLeftClose, PanelLeft } from 'lucide-react';
+import { Clock, LayoutDashboard, History, CalendarDays, Users, Settings, LogOut, Shield, Calendar, FileText, LayoutGrid, PanelLeftClose, PanelLeft, BarChart3, DollarSign, TrendingUp } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery } from '@tanstack/react-query';
@@ -30,6 +30,9 @@ const userMenuItems = [
 const adminMenuItems = [
   { title: 'Rekap', url: '/admin', icon: Shield },
   { title: 'Monitor', url: '/admin/daily', icon: LayoutGrid },
+  { title: 'Analitik', url: '/admin/analytics', icon: TrendingUp },
+  { title: 'Laporan', url: '/admin/reports', icon: BarChart3 },
+  { title: 'Payroll', url: '/admin/payroll', icon: DollarSign },
   { title: 'Karyawan', url: '/admin/employees', icon: Users },
   { title: 'Izin', url: '/admin/leaves', icon: CalendarDays },
   { title: 'Libur', url: '/admin/holidays', icon: Calendar },

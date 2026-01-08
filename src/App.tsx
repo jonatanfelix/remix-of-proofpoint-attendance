@@ -15,6 +15,9 @@ import AdminLeaves from "./pages/AdminLeaves";
 import AdminHolidays from "./pages/AdminHolidays";
 import AdminDailyMonitor from "./pages/AdminDailyMonitor";
 import AdminAuditLogs from "./pages/AdminAuditLogs";
+import AdminReports from "./pages/AdminReports";
+import AdminPayroll from "./pages/AdminPayroll";
+import AdminAnalytics from "./pages/AdminAnalytics";
 import LeaveRequest from "./pages/LeaveRequest";
 import Profile from "./pages/Profile";
 import Clock from "./pages/Clock";
@@ -126,6 +129,30 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <AdminAuditLogs />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/reports"
+                element={
+                  <ProtectedRoute>
+                    <AdminReports />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/payroll"
+                element={
+                  <ProtectedRoute>
+                    <AdminPayroll />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/analytics"
+                element={
+                  <ProtectedRoute>
+                    <AdminAnalytics />
                   </ProtectedRoute>
                 }
               />
