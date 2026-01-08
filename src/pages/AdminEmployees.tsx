@@ -207,7 +207,7 @@ const AdminEmployees = () => {
       employeeType: editEmployeeType,
       jobTitle: editJobTitle,
       department: editDepartment,
-      shiftId: editShiftId || null,
+      shiftId: editShiftId === 'none' ? null : editShiftId || null,
       isActive: editIsActive,
     });
   };
@@ -262,11 +262,12 @@ const AdminEmployees = () => {
       if (data.error) throw new Error(data.error);
 
       // Update additional fields if provided (with retry to handle race condition)
-      if (newJobTitle || newDepartment || newShiftId) {
+      const shiftIdToSave = newShiftId === 'none' ? null : newShiftId || null;
+      if (newJobTitle || newDepartment || shiftIdToSave) {
         const updateSuccess = await updateProfileWithRetry(data.user.id, {
           job_title: newJobTitle || null,
           department: newDepartment || null,
-          shift_id: newShiftId || null,
+          shift_id: shiftIdToSave,
         });
 
         if (!updateSuccess) {
@@ -714,7 +715,7 @@ const AdminEmployees = () => {
                   <SelectValue placeholder="Pilih shift..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Tidak ada shift</SelectItem>
+                  <SelectItem value="none">Tidak ada shift</SelectItem>
                   {shifts?.map((shift) => (
                     <SelectItem key={shift.id} value={shift.id}>
                       {shift.name} ({shift.start_time.slice(0, 5)} - {shift.end_time.slice(0, 5)})
@@ -867,7 +868,7 @@ const AdminEmployees = () => {
                   <SelectValue placeholder="Pilih shift..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Tidak ada shift</SelectItem>
+                  <SelectItem value="none">Tidak ada shift</SelectItem>
                   {shifts?.map((shift) => (
                     <SelectItem key={shift.id} value={shift.id}>
                       {shift.name} ({shift.start_time.slice(0, 5)} - {shift.end_time.slice(0, 5)})
