@@ -1,5 +1,4 @@
-import { SidebarProvider } from '@/components/ui/sidebar';
-import { AppSidebar } from './AppSidebar';
+import Header from './Header';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -7,13 +6,11 @@ interface AppLayoutProps {
 
 export function AppLayout({ children }: AppLayoutProps) {
   return (
-    <SidebarProvider>
-      <div className="min-h-screen flex w-full">
-        <AppSidebar />
-        <main className="flex-1 overflow-auto">
-          {children}
-        </main>
-      </div>
-    </SidebarProvider>
+    <div className="min-h-screen flex flex-col w-full">
+      <Header />
+      <main className="flex-1 overflow-auto">
+        {children}
+      </main>
+    </div>
   );
 }
