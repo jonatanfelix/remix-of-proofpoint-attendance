@@ -198,7 +198,13 @@ const Dashboard = () => {
   }, [profile?.shift?.start_time, company?.work_start_time]);
 
   // Calculate lateness based on existing clock-in or current time for new clock-in
+  // ONLY for office employees - field employees don't have lateness concept
   const calculateLateness = useCallback((checkCurrentTime: boolean = false) => {
+    // Field employees don't have lateness - they work based on duration
+    if (profile?.employee_type === 'field') {
+      return { isLate: false, lateMinutes: 0 };
+    }
+
     const now = new Date();
     const [hours, minutes] = effectiveWorkStartTime.split(':').map(Number);
     
@@ -226,7 +232,7 @@ const Dashboard = () => {
       isLate: diffMinutes > 0,
       lateMinutes: diffMinutes > 0 ? diffMinutes : 0,
     };
-  }, [todayClockIn, effectiveWorkStartTime]);
+  }, [todayClockIn, effectiveWorkStartTime, profile?.employee_type]);
 
   // For status card - show lateness from existing record
   const { isLate, lateMinutes } = calculateLateness(false);

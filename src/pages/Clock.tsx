@@ -183,7 +183,13 @@ const Clock = () => {
     return '08:00:00';
   }, [profile?.shift?.start_time, company?.work_start_time]);
 
+  // Calculate lateness - ONLY for office employees
   const calculateLateness = useCallback((checkCurrentTime: boolean = false) => {
+    // Field employees don't have lateness - they work based on duration
+    if (profile?.employee_type === 'field') {
+      return { isLate: false, lateMinutes: 0 };
+    }
+
     const now = new Date();
     const [hours, minutes] = effectiveWorkStartTime.split(':').map(Number);
     
@@ -209,7 +215,7 @@ const Clock = () => {
       isLate: diffMinutes > 0,
       lateMinutes: diffMinutes > 0 ? diffMinutes : 0,
     };
-  }, [todayClockIn, effectiveWorkStartTime]);
+  }, [todayClockIn, effectiveWorkStartTime, profile?.employee_type]);
 
   const { isLate, lateMinutes } = calculateLateness(false);
   const currentTimeLateness = calculateLateness(true);
