@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
-import Header from '@/components/layout/Header';
+import { AppLayout } from '@/components/layout/AppLayout';
 import GoogleMapsLink from '@/components/GoogleMapsLink';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -315,17 +315,18 @@ const Admin = () => {
 
   if (roleLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Loading...</p>
-      </div>
+      <AppLayout>
+        <div className="flex items-center justify-center h-64">
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </AppLayout>
     );
   }
 
   if (!isAdminOrDeveloper) {
     return (
-      <div className="min-h-screen bg-background">
-        <Header />
-        <main className="container mx-auto max-w-2xl px-4 py-6">
+      <AppLayout>
+        <div className="container mx-auto max-w-2xl px-4 py-6">
           <Card>
             <CardContent className="py-8 text-center">
               <p className="text-destructive mb-4">Akses Ditolak</p>
@@ -335,8 +336,8 @@ const Admin = () => {
               <Button onClick={() => navigate('/')}>Kembali ke Dashboard</Button>
             </CardContent>
           </Card>
-        </main>
-      </div>
+        </div>
+      </AppLayout>
     );
   }
 
@@ -344,10 +345,8 @@ const Admin = () => {
   const dailyRecords = records ? transformToDaily(records) : [];
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-
-      <main className="container mx-auto max-w-7xl px-4 py-6">
+    <AppLayout>
+      <div className="container mx-auto max-w-7xl px-4 py-6">
         <div className="space-y-6">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -595,8 +594,8 @@ const Admin = () => {
             </CardContent>
           </Card>
         </div>
-      </main>
-    </div>
+      </div>
+    </AppLayout>
   );
 };
 

@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import Header from '@/components/layout/Header';
+import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -213,9 +213,8 @@ const LeaveRequest = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      <main className="container mx-auto max-w-4xl px-4 py-6 space-y-6">
+    <AppLayout>
+      <div className="container mx-auto max-w-4xl px-4 py-6 space-y-6">
         <div>
           <h1 className="text-2xl font-bold">Pengajuan Izin / Cuti</h1>
           <p className="text-muted-foreground">Ajukan permohonan izin atau cuti Anda</p>
@@ -416,8 +415,8 @@ const LeaveRequest = () => {
             )}
           </CardContent>
         </Card>
-      </main>
-    </div>
+      </div>
+    </AppLayout>
   );
 };
 

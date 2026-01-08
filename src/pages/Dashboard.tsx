@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import Header from '@/components/layout/Header';
+import { AppLayout } from '@/components/layout/AppLayout';
 import StatusCard from '@/components/attendance/StatusCard';
 import AttendanceButtons from '@/components/attendance/AttendanceButtons';
 import RecentHistory from '@/components/attendance/RecentHistory';
@@ -456,17 +456,16 @@ const Dashboard = () => {
   // Show loading state while profile is being fetched
   if (profileLoading) {
     return (
-      <div className="min-h-screen bg-background">
-        <Header />
-        <main className="container mx-auto max-w-2xl px-4 py-6">
+      <AppLayout>
+        <div className="container mx-auto max-w-2xl px-4 py-6">
           <div className="flex items-center justify-center h-64">
             <div className="flex flex-col items-center gap-4">
               <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
               <p className="text-muted-foreground">Memuat profil...</p>
             </div>
           </div>
-        </main>
-      </div>
+        </div>
+      </AppLayout>
     );
   }
 
@@ -475,10 +474,8 @@ const Dashboard = () => {
   const showCompanyWarning = profile && !profile.company_id;
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-
-      <main className="container mx-auto max-w-2xl px-4 py-6">
+    <AppLayout>
+      <div className="container mx-auto max-w-2xl px-4 py-6">
         <div className="space-y-6">
           {/* Warning if no company assigned */}
           {showCompanyWarning && (
@@ -689,23 +686,23 @@ const Dashboard = () => {
           {/* Recent History */}
           <RecentHistory records={recentRecords || []} isLoading={recordsLoading} />
         </div>
-      </main>
 
-      {/* Camera Capture Modal - Required for attendance */}
-      {currentPosition && (
-        <CameraCapture
-          isOpen={showCamera}
-          onClose={handleCameraClose}
-          onCapture={handleCameraCapture}
-          employeeName={profile?.full_name || user?.email || 'Employee'}
-          recordType={pendingRecordType === 'clock_in' ? 'CLOCK IN' : 'CLOCK OUT'}
-          latitude={currentPosition.latitude}
-          longitude={currentPosition.longitude}
-          isLate={pendingRecordType === 'clock_in' ? currentTimeLateness.isLate : false}
-          lateMinutes={pendingRecordType === 'clock_in' ? currentTimeLateness.lateMinutes : 0}
-        />
-      )}
-    </div>
+        {/* Camera Capture Modal - Required for attendance */}
+        {currentPosition && (
+          <CameraCapture
+            isOpen={showCamera}
+            onClose={handleCameraClose}
+            onCapture={handleCameraCapture}
+            employeeName={profile?.full_name || user?.email || 'Employee'}
+            recordType={pendingRecordType === 'clock_in' ? 'CLOCK IN' : 'CLOCK OUT'}
+            latitude={currentPosition.latitude}
+            longitude={currentPosition.longitude}
+            isLate={pendingRecordType === 'clock_in' ? currentTimeLateness.isLate : false}
+            lateMinutes={pendingRecordType === 'clock_in' ? currentTimeLateness.lateMinutes : 0}
+          />
+        )}
+      </div>
+    </AppLayout>
   );
 };
 
