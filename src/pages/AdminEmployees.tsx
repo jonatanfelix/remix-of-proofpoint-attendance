@@ -35,8 +35,10 @@ import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { 
   Users, Search, MapPin, MapPinOff, Edit, UserPlus, Shield, ShieldCheck, 
-  Code, Briefcase, HardHat, Clock, Filter, CheckCircle2, XCircle, Building2
+  Code, Briefcase, HardHat, Clock, Filter, CheckCircle2, XCircle, Building2,
+  Download, Upload
 } from 'lucide-react';
+import { ImportEmployees } from '@/components/employees/ImportEmployees';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
@@ -403,10 +405,17 @@ const AdminEmployees = () => {
             <h1 className="text-2xl font-bold">Manajemen Karyawan</h1>
             <p className="text-muted-foreground">Kelola daftar karyawan, shift, dan pengaturan absensi</p>
           </div>
-          <Button onClick={() => setShowAddDialog(true)} className="border-2 border-foreground">
-            <UserPlus className="h-4 w-4 mr-2" />
-            Tambah {isDeveloper ? 'User' : 'Karyawan'}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <ImportEmployees 
+              shifts={shifts || []} 
+              isDeveloper={isDeveloper}
+              onSuccess={() => refetchEmployees()}
+            />
+            <Button onClick={() => setShowAddDialog(true)} className="border-2 border-foreground">
+              <UserPlus className="h-4 w-4 mr-2" />
+              Tambah {isDeveloper ? 'User' : 'Karyawan'}
+            </Button>
+          </div>
         </div>
 
         {/* Stats */}
