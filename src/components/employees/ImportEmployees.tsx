@@ -45,27 +45,6 @@ const TEMPLATE_COLUMNS = [
   'role'
 ];
 
-const TEMPLATE_EXAMPLE_DATA = [
-  {
-    nama_lengkap: 'John Doe',
-    email: 'john.doe@company.com',
-    password: 'password123',
-    jabatan: 'Software Engineer',
-    departemen: 'IT',
-    shift: 'Regular (08:00 - 17:00)',
-    role: 'employee'
-  },
-  {
-    nama_lengkap: 'Jane Smith',
-    email: 'jane.smith@company.com',
-    password: 'password456',
-    jabatan: 'HR Manager',
-    departemen: 'HR',
-    shift: 'Regular (08:00 - 17:00)',
-    role: 'employee'
-  }
-];
-
 export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmployeesProps) => {
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -79,59 +58,86 @@ export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmploy
     // Create workbook
     const wb = XLSX.utils.book_new();
     
+    // Get actual shift names from database
+    const shiftNames = shifts.map(s => s.name);
+    const defaultShift = shiftNames.length > 0 ? shiftNames[0] : '';
+    
     // Create instructions sheet
     const instructionsData = [
       ['PETUNJUK PENGGUNAAN TEMPLATE IMPORT KARYAWAN'],
       [''],
-      ['1. Isi data karyawan pada sheet "Data Karyawan"'],
-      ['2. Kolom dengan tanda (*) wajib diisi'],
-      ['3. Jangan mengubah nama kolom (baris pertama)'],
-      ['4. Password minimal 6 karakter'],
-      ['5. Role hanya boleh diisi: employee atau admin (default: employee)'],
-      ['6. Shift harus sesuai dengan nama shift yang tersedia di sistem'],
+      ['KOLOM WAJIB DIISI:'],
+      ['• nama_lengkap - Nama lengkap karyawan'],
+      ['• email - Email yang valid dan belum terdaftar'],
+      ['• password - Minimal 6 karakter'],
       [''],
-      ['DAFTAR SHIFT TERSEDIA:'],
-      ...shifts.map((s, i) => [`${i + 1}. ${s.name}`]),
+      ['KOLOM OPSIONAL:'],
+      ['• jabatan - Posisi/jabatan karyawan'],
+      ['• departemen - Nama departemen'],
+      ['• shift - HARUS SAMA PERSIS dengan nama shift di bawah'],
+      ['• role - employee atau admin (default: employee)'],
       [''],
-      ['CATATAN:'],
-      ['- Jika role tidak diisi, akan otomatis menjadi "employee"'],
-      ['- Admin hanya bisa membuat role "employee"'],
-      ['- Developer bisa membuat role "employee" atau "admin"'],
-    ];
+      ['═══════════════════════════════════════════'],
+      ['DAFTAR SHIFT TERSEDIA (COPY PASTE PERSIS):'],
+      ['═══════════════════════════════════════════'],
+      ...shiftNames.map(name => [`→ ${name}`]),
+      shiftNames.length === 0 ? ['(Belum ada shift, buat dulu di menu Settings)'] : [],
+      [''],
+      ['═══════════════════════════════════════════'],
+      ['DAFTAR ROLE TERSEDIA:'],
+      ['═══════════════════════════════════════════'],
+      ['→ employee'],
+      ['→ admin (hanya Developer yang bisa buat)'],
+      [''],
+      ['CATATAN PENTING:'],
+      ['- Jangan ubah nama kolom di baris pertama'],
+      ['- Hapus baris contoh sebelum import'],
+      ['- Shift HARUS ditulis sama persis (case sensitive)'],
+      ['- Jika shift kosong, karyawan tidak punya jadwal'],
+    ].filter(row => row.length > 0);
     
     const wsInstructions = XLSX.utils.aoa_to_sheet(instructionsData);
     wsInstructions['!cols'] = [{ wch: 60 }];
     XLSX.utils.book_append_sheet(wb, wsInstructions, 'Petunjuk');
     
-    // Create data sheet with headers and example
-    const dataWithHeaders = [
+    // Create reference sheet with shift list for easy copy-paste
+    const refData = [
+      ['SHIFT (Copy-Paste ke kolom shift)'],
+      ...shiftNames.map(name => [name]),
+      [''],
+      ['ROLE (Copy-Paste ke kolom role)'],
+      ['employee'],
+      ['admin'],
+    ];
+    const wsRef = XLSX.utils.aoa_to_sheet(refData);
+    wsRef['!cols'] = [{ wch: 40 }];
+    XLSX.utils.book_append_sheet(wb, wsRef, 'Referensi');
+    
+    // Create data sheet with headers and example using actual shift names
+    const exampleData = [
       ['nama_lengkap*', 'email*', 'password*', 'jabatan', 'departemen', 'shift', 'role'],
-      ...TEMPLATE_EXAMPLE_DATA.map(row => [
-        row.nama_lengkap,
-        row.email,
-        row.password,
-        row.jabatan,
-        row.departemen,
-        row.shift,
-        row.role
-      ])
+      ['Budi Santoso', 'budi.santoso@company.com', 'password123', 'Staff IT', 'IT', defaultShift, 'employee'],
+      ['Siti Rahayu', 'siti.rahayu@company.com', 'password456', 'HRD', 'HR', defaultShift, 'employee'],
+      ['', '', '', '', '', '', ''], // Empty row for user to fill
+      ['', '', '', '', '', '', ''],
+      ['', '', '', '', '', '', ''],
     ];
     
-    const wsData = XLSX.utils.aoa_to_sheet(dataWithHeaders);
+    const wsData = XLSX.utils.aoa_to_sheet(exampleData);
     wsData['!cols'] = [
       { wch: 25 }, // nama_lengkap
-      { wch: 30 }, // email
+      { wch: 35 }, // email
       { wch: 15 }, // password
-      { wch: 25 }, // jabatan
+      { wch: 20 }, // jabatan
       { wch: 15 }, // departemen
-      { wch: 25 }, // shift
-      { wch: 10 }, // role
+      { wch: 30 }, // shift - wider to fit shift names
+      { wch: 12 }, // role
     ];
     XLSX.utils.book_append_sheet(wb, wsData, 'Data Karyawan');
     
     // Download file
     XLSX.writeFile(wb, 'Template_Import_Karyawan.xlsx');
-    toast.success('Template berhasil diunduh!');
+    toast.success('Template berhasil diunduh! Lihat sheet "Petunjuk" dan "Referensi"');
   };
 
   // Find shift ID by name
