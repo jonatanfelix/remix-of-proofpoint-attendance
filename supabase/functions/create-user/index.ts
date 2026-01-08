@@ -91,14 +91,35 @@ Deno.serve(async (req) => {
     console.log('Admin company_id:', adminCompanyId);
 
     // Parse request body
-    const { email, password, fullName, role: newUserRole } = await req.json();
+    const { password, fullName, role: newUserRole } = await req.json();
 
-    if (!email || !password || !fullName || !newUserRole) {
+    if (!password || !fullName || !newUserRole) {
       return new Response(
-        JSON.stringify({ error: 'Missing required fields: email, password, fullName, role' }),
+        JSON.stringify({ error: 'Missing required fields: password, fullName, role' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // Generate username from fullName (lowercase, replace spaces with dots)
+    const baseUsername = fullName.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '');
+    
+    // Check if username already exists and add number if needed
+    let username = baseUsername;
+    let counter = 1;
+    while (true) {
+      const { data: existingUser } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .eq('username', username)
+        .maybeSingle();
+      
+      if (!existingUser) break;
+      username = `${baseUsername}${counter}`;
+      counter++;
+    }
+
+    // Generate internal email from username (not shown to users)
+    const email = `${username}@internal.local`;
 
     // Validate role assignment permissions
     // Developer can create admin or employee
@@ -124,7 +145,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log('Creating user:', { email, fullName, role: newUserRole, company_id: adminCompanyId });
+    console.log('Creating user:', { username, email, fullName, role: newUserRole, company_id: adminCompanyId });
 
     // Create user using admin API
     const { data: createData, error: createError } = await supabaseAdmin.auth.admin.createUser({
@@ -159,8 +180,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Update profile with role and company_id from admin
-    const profileUpdate: { role?: string; company_id?: string } = {};
+    // Update profile with role, company_id, and username
+    const profileUpdate: { role?: string; company_id?: string; username: string } = {
+      username: username,
+    };
     if (newUserRole !== 'employee') {
       profileUpdate.role = newUserRole;
     }
@@ -168,25 +191,23 @@ Deno.serve(async (req) => {
       profileUpdate.company_id = adminCompanyId;
     }
 
-    if (Object.keys(profileUpdate).length > 0) {
-      const { error: updateProfileError } = await supabaseAdmin
-        .from('profiles')
-        .update(profileUpdate)
-        .eq('user_id', newUser.id);
+    const { error: updateProfileError } = await supabaseAdmin
+      .from('profiles')
+      .update(profileUpdate)
+      .eq('user_id', newUser.id);
 
-      if (updateProfileError) {
-        console.error('Update profile error:', updateProfileError);
-      }
+    if (updateProfileError) {
+      console.error('Update profile error:', updateProfileError);
     }
 
-    console.log('User created successfully with role:', newUserRole, 'company_id:', adminCompanyId);
+    console.log('User created successfully with username:', username, 'role:', newUserRole, 'company_id:', adminCompanyId);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         user: { 
           id: newUser.id, 
-          email: newUser.email,
+          username: username,
           role: newUserRole,
           company_id: adminCompanyId
         } 

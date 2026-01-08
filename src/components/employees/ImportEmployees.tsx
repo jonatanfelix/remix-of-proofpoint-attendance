@@ -18,7 +18,7 @@ import { toast } from 'sonner';
 interface ImportResult {
   row: number;
   name: string;
-  email: string;
+  username: string;
   status: 'success' | 'error' | 'pending';
   message?: string;
 }
@@ -37,7 +37,6 @@ interface ImportEmployeesProps {
 // Template columns - these match what we expect in the Excel file
 const TEMPLATE_COLUMNS = [
   'nama_lengkap',
-  'email',
   'password',
   'jabatan',
   'departemen',
@@ -68,7 +67,6 @@ export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmploy
       [''],
       ['KOLOM WAJIB DIISI:'],
       ['• nama_lengkap - Nama lengkap karyawan'],
-      ['• email - Email yang valid dan belum terdaftar'],
       ['• password - Minimal 6 karakter'],
       [''],
       ['KOLOM OPSIONAL:'],
@@ -94,6 +92,7 @@ export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmploy
       ['- Hapus baris contoh sebelum import'],
       ['- Shift HARUS ditulis sama persis (case sensitive)'],
       ['- Jika shift kosong, karyawan tidak punya jadwal'],
+      ['- Username akan digenerate otomatis dari nama'],
     ].filter(row => row.length > 0);
     
     const wsInstructions = XLSX.utils.aoa_to_sheet(instructionsData);
@@ -115,18 +114,17 @@ export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmploy
     
     // Create data sheet with headers and example using actual shift names
     const exampleData = [
-      ['nama_lengkap*', 'email*', 'password*', 'jabatan', 'departemen', 'shift', 'role'],
-      ['Budi Santoso', 'budi.santoso@company.com', 'password123', 'Staff IT', 'IT', defaultShift, 'employee'],
-      ['Siti Rahayu', 'siti.rahayu@company.com', 'password456', 'HRD', 'HR', defaultShift, 'employee'],
-      ['', '', '', '', '', '', ''], // Empty row for user to fill
-      ['', '', '', '', '', '', ''],
-      ['', '', '', '', '', '', ''],
+      ['nama_lengkap*', 'password*', 'jabatan', 'departemen', 'shift', 'role'],
+      ['Budi Santoso', 'password123', 'Staff IT', 'IT', defaultShift, 'employee'],
+      ['Siti Rahayu', 'password456', 'HRD', 'HR', defaultShift, 'employee'],
+      ['', '', '', '', '', ''], // Empty row for user to fill
+      ['', '', '', '', '', ''],
+      ['', '', '', '', '', ''],
     ];
     
     const wsData = XLSX.utils.aoa_to_sheet(exampleData);
     wsData['!cols'] = [
       { wch: 25 }, // nama_lengkap
-      { wch: 35 }, // email
       { wch: 15 }, // password
       { wch: 20 }, // jabatan
       { wch: 15 }, // departemen
@@ -174,12 +172,12 @@ export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmploy
 
   // Import single employee
   const importEmployee = async (
-    row: { nama_lengkap: string; email: string; password: string; jabatan?: string; departemen?: string; shift?: string; role?: string }
-  ): Promise<{ success: boolean; message?: string }> => {
+    row: { nama_lengkap: string; password: string; jabatan?: string; departemen?: string; shift?: string; role?: string }
+  ): Promise<{ success: boolean; message?: string; username?: string }> => {
     try {
       // Validate required fields
-      if (!row.nama_lengkap || !row.email || !row.password) {
-        return { success: false, message: 'Nama, email, dan password wajib diisi' };
+      if (!row.nama_lengkap || !row.password) {
+        return { success: false, message: 'Nama dan password wajib diisi' };
       }
 
       if (row.password.length < 6) {
@@ -203,7 +201,6 @@ export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmploy
       // Create user via edge function
       const { data, error } = await supabase.functions.invoke('create-user', {
         body: {
-          email: row.email.trim(),
           password: row.password,
           fullName: row.nama_lengkap.trim(),
           role: role,
@@ -223,11 +220,11 @@ export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmploy
         });
 
         if (!updateSuccess) {
-          return { success: true, message: 'Dibuat, tapi data tambahan gagal disimpan' };
+          return { success: true, message: 'Dibuat, tapi data tambahan gagal disimpan', username: data.user.username };
         }
       }
 
-      return { success: true };
+      return { success: true, username: data.user.username };
     } catch (error: any) {
       console.error('Import error:', error);
       return { success: false, message: error.message || 'Gagal membuat user' };
@@ -281,7 +278,7 @@ export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmploy
       const initialResults: ImportResult[] = normalizedData.map((row, index) => ({
         row: index + 2, // +2 because Excel is 1-indexed and has header
         name: String(row.nama_lengkap || ''),
-        email: String(row.email || ''),
+        username: '',
         status: 'pending' as const,
       }));
       setImportResults(initialResults);
@@ -293,7 +290,6 @@ export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmploy
         
         const result = await importEmployee({
           nama_lengkap: String(row.nama_lengkap || ''),
-          email: String(row.email || ''),
           password: String(row.password || ''),
           jabatan: row.jabatan ? String(row.jabatan) : undefined,
           departemen: row.departemen ? String(row.departemen) : undefined,
@@ -308,6 +304,7 @@ export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmploy
             ...updated[i],
             status: result.success ? 'success' : 'error',
             message: result.message,
+            username: result.username || '',
           };
           return updated;
         });
@@ -454,7 +451,7 @@ export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmploy
                           Baris {result.row}: {result.name || '(Nama kosong)'}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {result.email || '(Email kosong)'}
+                          {result.username ? `Username: ${result.username}` : '(Belum diproses)'}
                         </div>
                       </div>
                     </div>

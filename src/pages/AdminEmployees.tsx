@@ -88,7 +88,6 @@ const AdminEmployees = () => {
   
   // Add employee form state
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newFullName, setNewFullName] = useState('');
   const [newRole, setNewRole] = useState<'employee' | 'admin'>('employee');
@@ -237,8 +236,8 @@ const AdminEmployees = () => {
 
   // Create user handler
   const handleCreateUser = async () => {
-    if (!newEmail || !newPassword || !newFullName) {
-      toast.error('Nama, Email, dan Password harus diisi');
+    if (!newPassword || !newFullName) {
+      toast.error('Nama dan Password harus diisi');
       return;
     }
 
@@ -251,7 +250,6 @@ const AdminEmployees = () => {
     try {
       const { data, error } = await supabase.functions.invoke('create-user', {
         body: {
-          email: newEmail,
           password: newPassword,
           fullName: newFullName,
           role: newRole,
@@ -276,7 +274,7 @@ const AdminEmployees = () => {
         }
       }
 
-      toast.success(`${newRole === 'admin' ? 'Admin' : 'Karyawan'} berhasil ditambahkan!`);
+      toast.success(`${newRole === 'admin' ? 'Admin' : 'Karyawan'} berhasil ditambahkan! Username: ${data.user.username}`);
       queryClient.invalidateQueries({ queryKey: ['admin-employees'] });
       setShowAddDialog(false);
       resetAddForm();
@@ -289,7 +287,6 @@ const AdminEmployees = () => {
   };
 
   const resetAddForm = () => {
-    setNewEmail('');
     setNewPassword('');
     setNewFullName('');
     setNewRole('employee');
@@ -814,17 +811,6 @@ const AdminEmployees = () => {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="new-email">Email *</Label>
-              <Input
-                id="new-email"
-                type="email"
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                placeholder="john@company.com"
-                className="border-2 border-foreground"
-              />
-            </div>
 
             <div className="space-y-2">
               <Label htmlFor="new-password">Password *</Label>

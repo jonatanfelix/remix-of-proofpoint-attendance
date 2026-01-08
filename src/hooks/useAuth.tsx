@@ -7,7 +7,7 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signIn: (username: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -54,9 +54,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return { error };
   };
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (username: string, password: string) => {
+    // Look up email from username in profiles table
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('email')
+      .eq('username', username.toLowerCase().trim())
+      .maybeSingle();
+
+    if (profileError) {
+      return { error: new Error('Terjadi kesalahan. Coba lagi nanti.') };
+    }
+
+    if (!profile) {
+      return { error: new Error('Username tidak ditemukan') };
+    }
+
     const { error } = await supabase.auth.signInWithPassword({
-      email,
+      email: profile.email,
       password,
     });
     return { error };

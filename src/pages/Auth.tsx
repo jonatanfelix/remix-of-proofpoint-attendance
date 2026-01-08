@@ -11,14 +11,14 @@ import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
 
 const loginSchema = z.object({
-  email: z.string().email('Email tidak valid'),
+  username: z.string().min(1, 'Username tidak boleh kosong'),
   password: z.string().min(6, 'Password minimal 6 karakter'),
 });
 
 type AuthView = 'login' | 'forgot-password' | 'reset-password';
 
 const Auth = () => {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -82,7 +82,7 @@ const Auth = () => {
     setErrors({});
     
     try {
-      loginSchema.parse({ email, password });
+      loginSchema.parse({ username, password });
       return true;
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -106,12 +106,12 @@ const Auth = () => {
     setIsSubmitting(true);
 
     try {
-      const { error } = await signIn(email, password);
+      const { error } = await signIn(username, password);
       if (error) {
         if (error.message.includes('Invalid login credentials')) {
           toast({
             title: 'Login Gagal',
-            description: 'Email atau password salah. Silakan coba lagi.',
+            description: 'Username atau password salah. Silakan coba lagi.',
             variant: 'destructive',
           });
         } else {
@@ -394,33 +394,23 @@ const Auth = () => {
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="username">Username</Label>
                   <Input
-                    id="email"
-                    type="email"
-                    placeholder="you@company.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    id="username"
+                    type="text"
+                    placeholder="budi.santoso"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
                     className="border-2 border-foreground"
                     disabled={isSubmitting}
                   />
-                  {errors.email && (
-                    <p className="text-sm text-destructive">{errors.email}</p>
+                  {errors.username && (
+                    <p className="text-sm text-destructive">{errors.username}</p>
                   )}
                 </div>
 
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="password">Password</Label>
-                    <Button
-                      type="button"
-                      variant="link"
-                      className="h-auto p-0 text-sm text-muted-foreground hover:text-foreground"
-                      onClick={() => setView('forgot-password')}
-                    >
-                      Lupa password?
-                    </Button>
-                  </div>
+                  <Label htmlFor="password">Password</Label>
                   <div className="relative">
                     <Input
                       id="password"
@@ -465,7 +455,7 @@ const Auth = () => {
                   <Info className="h-5 w-5 mt-0.5 shrink-0 text-muted-foreground" />
                   <p className="text-sm text-muted-foreground">
                     Pendaftaran akun baru hanya dapat dilakukan oleh Admin. 
-                    Hubungi Admin perusahaan Anda untuk mendapatkan akun.
+                    Hubungi Admin untuk mendapatkan username dan password.
                   </p>
                 </div>
               </div>
