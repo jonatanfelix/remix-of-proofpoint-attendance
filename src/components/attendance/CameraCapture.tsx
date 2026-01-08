@@ -185,7 +185,7 @@ const CameraCapture = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-background/80 backdrop-blur-sm">
       <Card className="w-full max-w-lg mx-4 border-2 border-foreground">
         <CardContent className="p-4">
           <div className="flex items-center justify-between mb-4">

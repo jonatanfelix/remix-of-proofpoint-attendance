@@ -101,7 +101,7 @@ const LocationMap = ({ latitude, longitude, accuracy }: LocationMapProps) => {
   return (
     <div
       ref={mapRef}
-      className="w-full h-48 rounded-lg border-2 border-foreground overflow-hidden"
+      className="w-full h-48 rounded-lg border-2 border-foreground overflow-hidden relative z-0"
       style={{ minHeight: '200px' }}
     />
   );
