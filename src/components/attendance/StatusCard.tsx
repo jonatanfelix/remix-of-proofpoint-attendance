@@ -40,27 +40,57 @@ const StatusCard = ({
   const workHours = employeeType === 'field' ? calculateWorkHours() : null;
 
   const getStatusInfo = () => {
+    // Field employees - show work duration based info
+    if (employeeType === 'field') {
+      switch (status) {
+        case 'clocked_in':
+          return {
+            icon: <CheckCircle className="h-8 w-8" />,
+            title: 'Sedang Bekerja',
+            subtitle: workHours
+              ? `Sudah bekerja ${workHours.hours} jam ${workHours.minutes} menit`
+              : lastClockIn
+                ? `Mulai jam ${format(lastClockIn, 'HH:mm')}`
+                : 'Anda sedang bertugas',
+            bgClass: 'bg-accent',
+          };
+        case 'clocked_out':
+          return {
+            icon: <XCircle className="h-8 w-8" />,
+            title: 'Selesai Bekerja',
+            subtitle: workHours
+              ? `Total kerja: ${workHours.hours} jam ${workHours.minutes} menit`
+              : 'Sampai jumpa besok',
+            bgClass: 'bg-secondary',
+          };
+        default:
+          return {
+            icon: <Clock className="h-8 w-8" />,
+            title: 'Belum Mulai',
+            subtitle: 'Clock in untuk mulai bekerja',
+            bgClass: 'bg-muted',
+          };
+      }
+    }
+
+    // Office employees - show shift-based info with lateness
     switch (status) {
       case 'clocked_in':
         return {
           icon: <CheckCircle className="h-8 w-8" />,
           title: 'Sedang Bekerja',
-          subtitle: employeeType === 'field' && workHours
-            ? `Sudah bekerja ${workHours.hours} jam ${workHours.minutes} menit`
-            : lastClockIn
-              ? `Clock in jam ${format(lastClockIn, 'HH:mm')}`
-              : 'Anda sedang bertugas',
+          subtitle: lastClockIn
+            ? `Clock in jam ${format(lastClockIn, 'HH:mm')}`
+            : 'Anda sedang bertugas',
           bgClass: 'bg-accent',
         };
       case 'clocked_out':
         return {
           icon: <XCircle className="h-8 w-8" />,
           title: 'Shift Selesai',
-          subtitle: employeeType === 'field' && workHours
-            ? `Total kerja: ${workHours.hours} jam ${workHours.minutes} menit`
-            : lastClockOut
-              ? `Clock out jam ${format(lastClockOut, 'HH:mm')}`
-              : 'Sampai jumpa besok',
+          subtitle: lastClockOut
+            ? `Clock out jam ${format(lastClockOut, 'HH:mm')}`
+            : 'Sampai jumpa besok',
           bgClass: 'bg-secondary',
         };
       default:
@@ -84,12 +114,14 @@ const StatusCard = ({
         <div className="flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="text-xl font-bold">{title}</h3>
-            {isLate && lateMinutes && lateMinutes > 0 && (
+            {/* Only show late badge for office employees */}
+            {employeeType === 'office' && isLate && lateMinutes && lateMinutes > 0 && (
               <Badge variant="destructive" className="flex items-center gap-1">
                 <AlertTriangle className="h-3 w-3" />
                 Terlambat {lateMinutes} menit
               </Badge>
             )}
+            {/* Show work duration badge for field employees */}
             {employeeType === 'field' && status !== 'not_present' && workHours && (
               <Badge variant="outline" className="flex items-center gap-1 border-primary text-primary">
                 <Timer className="h-3 w-3" />
