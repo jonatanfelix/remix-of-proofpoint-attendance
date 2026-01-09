@@ -1,7 +1,12 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Camera, X, RotateCcw } from 'lucide-react';
+import { Camera, X, RotateCcw, User, AlertCircle, Loader2 } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { pipeline, env } from '@huggingface/transformers';
+
+// Configure transformers.js to use browser cache
+env.allowLocalModels = false;
 
 interface CameraCaptureProps {
   isOpen: boolean;
@@ -14,6 +19,22 @@ interface CameraCaptureProps {
   isLate?: boolean;
   lateMinutes?: number;
 }
+
+// Singleton for face detector to avoid reloading model
+let faceDetectorPromise: Promise<any> | null = null;
+
+const getFaceDetector = async () => {
+  if (!faceDetectorPromise) {
+    faceDetectorPromise = pipeline('object-detection', 'Xenova/detr-resnet-50', {
+      device: 'webgpu',
+    }).catch((err) => {
+      // Fallback to CPU if WebGPU not available
+      console.log('WebGPU not available, falling back to CPU');
+      return pipeline('object-detection', 'Xenova/detr-resnet-50');
+    });
+  }
+  return faceDetectorPromise;
+};
 
 const CameraCapture = ({
   isOpen,
@@ -28,18 +49,64 @@ const CameraCapture = ({
 }: CameraCaptureProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const detectionCanvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [faceDetected, setFaceDetected] = useState(false);
+  const [isDetecting, setIsDetecting] = useState(false);
+  const [modelLoading, setModelLoading] = useState(true);
+  const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const stopCamera = useCallback(() => {
+    if (detectionIntervalRef.current) {
+      clearInterval(detectionIntervalRef.current);
+      detectionIntervalRef.current = null;
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
     setIsReady(false);
+    setFaceDetected(false);
   }, []);
+
+  // Face detection function
+  const detectFaces = useCallback(async () => {
+    if (!videoRef.current || !detectionCanvasRef.current || !isReady) return;
+
+    const video = videoRef.current;
+    const canvas = detectionCanvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    canvas.width = 320; // Use smaller size for faster detection
+    canvas.height = 240;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    try {
+      const detector = await getFaceDetector();
+      const imageData = canvas.toDataURL('image/jpeg', 0.7);
+      
+      setIsDetecting(true);
+      const results = await detector(imageData);
+      setIsDetecting(false);
+
+      // Check if any person detected (DETR detects 'person' class)
+      const personDetected = results.some(
+        (result: any) => result.label === 'person' && result.score > 0.7
+      );
+      
+      setFaceDetected(personDetected);
+      setModelLoading(false);
+    } catch (err) {
+      console.error('Face detection error:', err);
+      setModelLoading(false);
+      // Allow capture even if detection fails
+      setFaceDetected(true);
+    }
+  }, [isReady]);
 
   const startCamera = useCallback(async () => {
     // Stop existing stream first
@@ -47,6 +114,7 @@ const CameraCapture = ({
     
     setIsLoading(true);
     setError(null);
+    setModelLoading(true);
 
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -68,6 +136,15 @@ const CameraCapture = ({
           setIsLoading(false);
         };
       }
+
+      // Start loading face detector in background
+      getFaceDetector().then(() => {
+        setModelLoading(false);
+      }).catch(() => {
+        setModelLoading(false);
+        setFaceDetected(true); // Allow if model fails to load
+      });
+
     } catch (err) {
       console.error('Camera error:', err);
       setError('Tidak dapat mengakses kamera. Silakan cek izin kamera di browser.');
@@ -87,6 +164,25 @@ const CameraCapture = ({
       stopCamera();
     };
   }, [isOpen, startCamera, stopCamera]);
+
+  // Run face detection periodically
+  useEffect(() => {
+    if (isReady && !modelLoading) {
+      // Initial detection
+      detectFaces();
+      
+      // Run detection every 2 seconds
+      detectionIntervalRef.current = setInterval(() => {
+        detectFaces();
+      }, 2000);
+    }
+
+    return () => {
+      if (detectionIntervalRef.current) {
+        clearInterval(detectionIntervalRef.current);
+      }
+    };
+  }, [isReady, modelLoading, detectFaces]);
 
   const capturePhoto = useCallback(() => {
     if (!videoRef.current || !canvasRef.current) return;
@@ -218,22 +314,67 @@ const CameraCapture = ({
                   muted
                   className="w-full h-full object-cover"
                 />
+                
+                {/* Face detection indicator */}
+                {isReady && (
+                  <div className={`absolute top-3 right-3 px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 ${
+                    modelLoading 
+                      ? 'bg-muted text-muted-foreground' 
+                      : faceDetected 
+                        ? 'bg-green-500/90 text-white' 
+                        : 'bg-destructive/90 text-white'
+                  }`}>
+                    {modelLoading ? (
+                      <>
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Memuat AI...
+                      </>
+                    ) : isDetecting ? (
+                      <>
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Mendeteksi...
+                      </>
+                    ) : faceDetected ? (
+                      <>
+                        <User className="h-3 w-3" />
+                        Wajah Terdeteksi
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-3 w-3" />
+                        Wajah Tidak Terdeteksi
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
+
+              {/* Warning if no face detected */}
+              {isReady && !modelLoading && !faceDetected && (
+                <Alert variant="destructive" className="mb-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Pastikan wajah Anda terlihat jelas di kamera sebelum mengambil foto.
+                  </AlertDescription>
+                </Alert>
+              )}
 
               <Button
                 onClick={capturePhoto}
                 className="w-full"
                 size="lg"
-                disabled={isLoading || !isReady}
+                disabled={isLoading || !isReady || (!faceDetected && !modelLoading)}
               >
                 <Camera className="h-5 w-5 mr-2" />
-                Ambil Foto
+                {modelLoading ? 'Memuat...' : faceDetected ? 'Ambil Foto' : 'Arahkan Wajah ke Kamera'}
               </Button>
             </>
           )}
 
           {/* Hidden canvas for watermarking */}
           <canvas ref={canvasRef} className="hidden" />
+          {/* Hidden canvas for face detection */}
+          <canvas ref={detectionCanvasRef} className="hidden" />
         </CardContent>
       </Card>
     </div>
