@@ -673,31 +673,289 @@ npm run preview
 
 ## 🐛 Troubleshooting
 
-### Error: "Geolocation not available"
+### Database & RLS Errors
 
-- Pastikan menggunakan HTTPS (production)
-- Pastikan browser mengizinkan akses lokasi
-- Cek apakah GPS device aktif
+#### Error: "infinite recursion detected in policy"
 
-### Error: "Camera not available"
+**Penyebab**: RLS policy memanggil tabel lain yang juga punya RLS, menyebabkan loop.
 
-- Pastikan menggunakan HTTPS (production)
-- Pastikan browser mengizinkan akses kamera
-- Cek apakah kamera tidak digunakan aplikasi lain
+**Solusi**: Gunakan `security definer` function:
+```sql
+-- Buat function untuk ambil company_id tanpa trigger RLS
+CREATE OR REPLACE FUNCTION public.get_user_company_id(_user_id uuid)
+RETURNS uuid
+LANGUAGE sql
+STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT company_id FROM public.profiles WHERE user_id = _user_id LIMIT 1
+$$;
+```
 
-### Error: "Failed to fetch" pada Edge Functions
+#### Error: "new row violates row-level security policy"
 
-- Pastikan Supabase project aktif
-- Cek apakah edge function sudah di-deploy
-- Verifikasi secrets sudah dikonfigurasi
+**Penyebab**: User mencoba insert/update data tanpa policy yang mengizinkan.
 
-### Build Error: "Module not found"
+**Solusi**:
+1. Cek apakah user sudah login (`auth.uid()` tidak null)
+2. Pastikan RLS policy untuk INSERT/UPDATE sudah ada
+3. Verifikasi `WITH CHECK` clause di policy
 
+#### Error: "relation does not exist"
+
+**Penyebab**: Tabel belum dibuat atau nama salah.
+
+**Solusi**:
+```bash
+# Jalankan semua migrasi
+supabase db push
+
+# Atau jalankan manual di SQL Editor
+```
+
+---
+
+### Authentication Errors
+
+#### Error: "Invalid login credentials"
+
+**Penyebab**: Email/password salah, atau user belum dikonfirmasi.
+
+**Solusi**:
+1. Cek email dan password sudah benar
+2. Di Supabase Dashboard → Authentication → Users, pastikan user ada dan confirmed
+3. Jika menggunakan username login, cek apakah username sudah ter-set di profiles
+
+#### Error: "Email not confirmed"
+
+**Penyebab**: Email confirmation aktif tapi user belum konfirmasi.
+
+**Solusi** (Development):
+```
+Supabase Dashboard → Authentication → Settings → 
+Email Auth → "Confirm email" → OFF
+```
+
+**Solusi** (Production):
+- User harus klik link konfirmasi di email
+- Atau admin konfirmasi manual di Dashboard
+
+#### Error: "User already registered"
+
+**Penyebab**: Email sudah terdaftar.
+
+**Solusi**: Gunakan email lain, atau reset password untuk email tersebut.
+
+#### Error: "requested path is invalid" saat login
+
+**Penyebab**: Site URL atau Redirect URL belum dikonfigurasi.
+
+**Solusi**:
+1. Buka Supabase Dashboard → Authentication → URL Configuration
+2. Set **Site URL**: `https://yourdomain.com` (atau URL preview Lovable)
+3. Tambah **Redirect URLs**: 
+   - `https://yourdomain.com/*`
+   - `http://localhost:5173/*` (untuk development)
+
+---
+
+### Edge Function Errors
+
+#### Error: "Function not found" (404)
+
+**Penyebab**: Edge function belum di-deploy.
+
+**Solusi**:
+```bash
+# Deploy semua functions
+supabase functions deploy
+
+# Atau deploy specific function
+supabase functions deploy create-user
+```
+
+#### Error: "Internal Server Error" (500)
+
+**Penyebab**: Error di dalam function code.
+
+**Solusi**:
+1. Cek logs di Supabase Dashboard → Edge Functions → Logs
+2. Pastikan semua secrets sudah dikonfigurasi
+3. Cek syntax error di function code
+
+#### Error: Deploy gagal dengan "deno.lock incompatible"
+
+**Penyebab**: Lockfile tidak kompatibel dengan edge-runtime.
+
+**Solusi**:
+```bash
+# Hapus lockfile dan deploy ulang
+rm supabase/functions/deno.lock
+supabase functions deploy
+```
+
+#### Error: "Missing authorization header"
+
+**Penyebab**: Request tidak menyertakan auth token.
+
+**Solusi**:
+- Pastikan user sudah login sebelum memanggil function
+- Gunakan `supabase.functions.invoke()` yang otomatis menyertakan token
+
+---
+
+### Storage Errors
+
+#### Error: "Bucket not found"
+
+**Penyebab**: Storage bucket belum dibuat.
+
+**Solusi**:
+1. Buka Supabase Dashboard → Storage
+2. Buat bucket yang diperlukan:
+   - `attendance-photos` (Public)
+   - `avatars` (Public)
+   - `leave-proofs` (Public)
+
+#### Error: "new row violates row-level security policy" saat upload
+
+**Penyebab**: Storage policy belum dikonfigurasi.
+
+**Solusi**: Tambahkan policy di SQL Editor:
+```sql
+-- Izinkan authenticated user upload ke folder mereka
+CREATE POLICY "Users can upload to own folder"
+ON storage.objects FOR INSERT
+WITH CHECK (
+  bucket_id = 'attendance-photos' 
+  AND auth.uid()::text = (storage.foldername(name))[1]
+);
+```
+
+---
+
+### Geolocation & Camera Errors
+
+#### Error: "Geolocation not available"
+
+**Penyebab**: 
+- Tidak menggunakan HTTPS (production)
+- Browser tidak mengizinkan akses lokasi
+- GPS device tidak aktif
+
+**Solusi**:
+1. Gunakan HTTPS di production
+2. Cek permission browser (klik icon 🔒 di address bar)
+3. Aktifkan GPS di device
+4. Di Chrome: Settings → Privacy → Location Services → ON
+
+#### Error: "Camera not available"
+
+**Penyebab**:
+- Tidak menggunakan HTTPS (production)
+- Kamera sedang digunakan aplikasi lain
+- Permission ditolak
+
+**Solusi**:
+1. Tutup aplikasi lain yang menggunakan kamera
+2. Reset permission: klik icon 🔒 → Reset permissions
+3. Refresh halaman
+
+#### Error: "Permission denied" untuk lokasi/kamera
+
+**Penyebab**: User menolak permission atau browser memblokir.
+
+**Solusi**:
+1. Klik icon 🔒 di address bar
+2. Set Location/Camera ke "Allow"
+3. Refresh halaman
+
+---
+
+### Build & Deploy Errors
+
+#### Error: "Module not found"
+
+**Penyebab**: Dependencies belum terinstall atau path import salah.
+
+**Solusi**:
 ```bash
 # Hapus node_modules dan reinstall
 rm -rf node_modules
+rm package-lock.json
 npm install
 ```
+
+#### Error: "Failed to resolve import"
+
+**Penyebab**: Path alias (@/) tidak dikenali.
+
+**Solusi**: Pastikan `vite.config.ts` dan `tsconfig.json` sudah benar:
+```typescript
+// vite.config.ts
+resolve: {
+  alias: {
+    "@": path.resolve(__dirname, "./src"),
+  },
+}
+```
+
+#### Error: Build berhasil tapi halaman blank
+
+**Penyebab**: SPA routing tidak dikonfigurasi di server.
+
+**Solusi Nginx**:
+```nginx
+location / {
+  try_files $uri $uri/ /index.html;
+}
+```
+
+---
+
+### Query Errors
+
+#### Error: "PGRST116" atau "JSON object requested, multiple rows returned"
+
+**Penyebab**: Menggunakan `.single()` tapi query mengembalikan lebih dari 1 row.
+
+**Solusi**: Gunakan `.maybeSingle()` atau `.limit(1)`:
+```typescript
+// ❌ Salah
+const { data } = await supabase
+  .from('profiles')
+  .select('*')
+  .eq('department', 'IT')
+  .single(); // Error jika ada banyak hasil
+
+// ✅ Benar
+const { data } = await supabase
+  .from('profiles')
+  .select('*')
+  .eq('user_id', userId)
+  .maybeSingle(); // Aman jika 0 atau 1 hasil
+```
+
+#### Error: "Could not find a relationship"
+
+**Penyebab**: Mencoba join tabel tanpa foreign key.
+
+**Solusi**: Pastikan foreign key ada, atau gunakan query terpisah.
+
+---
+
+### Common Setup Checklist
+
+Jika masih ada masalah, verifikasi checklist ini:
+
+- [ ] **Environment Variables**: `.env` sudah berisi URL dan key yang benar
+- [ ] **Migrasi**: Semua file di `supabase/migrations/` sudah dijalankan
+- [ ] **Seed Data**: `seed.sql` sudah dijalankan
+- [ ] **User Pertama**: Developer user sudah dibuat dan dikonfigurasi
+- [ ] **Storage Buckets**: 3 bucket sudah dibuat (attendance-photos, avatars, leave-proofs)
+- [ ] **Secrets**: RESEND_API_KEY sudah ditambahkan di Edge Functions Secrets
+- [ ] **Auth Settings**: Email confirmation dan signup sesuai kebutuhan
+- [ ] **HTTPS**: Production menggunakan HTTPS untuk geolocation/camera
 
 ---
 
