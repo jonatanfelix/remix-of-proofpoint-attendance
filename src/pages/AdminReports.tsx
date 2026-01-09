@@ -91,9 +91,12 @@ interface DailyDetail {
   employee: Employee;
   date: string;
   clockIn: string | null;
+  breakOut: string | null;
+  breakIn: string | null;
   clockOut: string | null;
   lateMinutes: number;
-  workDuration: number | null; // in minutes
+  breakDuration: number | null; // in minutes
+  workDuration: number | null; // in minutes (excluding break)
   status: 'present' | 'absent' | 'leave' | 'holiday' | 'weekend';
   leaveType?: string;
 }
@@ -376,8 +379,11 @@ const AdminReports = () => {
             employee: emp,
             date: dateStr,
             clockIn: null,
+            breakOut: null,
+            breakIn: null,
             clockOut: null,
             lateMinutes: 0,
+            breakDuration: null,
             workDuration: null,
             status: 'weekend',
           });
@@ -390,8 +396,11 @@ const AdminReports = () => {
             employee: emp,
             date: dateStr,
             clockIn: null,
+            breakOut: null,
+            breakIn: null,
             clockOut: null,
             lateMinutes: 0,
+            breakDuration: null,
             workDuration: null,
             status: 'holiday',
           });
@@ -407,8 +416,11 @@ const AdminReports = () => {
             employee: emp,
             date: dateStr,
             clockIn: null,
+            breakOut: null,
+            breakIn: null,
             clockOut: null,
             lateMinutes: 0,
+            breakDuration: null,
             workDuration: null,
             status: 'leave',
             leaveType: empLeave.leave_type,
@@ -422,6 +434,8 @@ const AdminReports = () => {
         ) || [];
 
         const clockIn = dayAttendance.find(a => a.record_type === 'clock_in');
+        const breakOut = dayAttendance.find(a => a.record_type === 'break_out');
+        const breakIn = dayAttendance.find(a => a.record_type === 'break_in');
         const clockOut = dayAttendance.find(a => a.record_type === 'clock_out');
 
         let lateMinutes = 0;
@@ -434,18 +448,28 @@ const AdminReports = () => {
           }
         }
 
-        // Calculate work duration (clock out - clock in)
+        // Calculate break duration
+        let breakDuration: number | null = null;
+        if (breakOut && breakIn) {
+          breakDuration = differenceInMinutes(new Date(breakIn.recorded_at), new Date(breakOut.recorded_at));
+        }
+
+        // Calculate work duration (clock out - clock in - break)
         let workDuration: number | null = null;
         if (clockIn && clockOut) {
-          workDuration = differenceInMinutes(new Date(clockOut.recorded_at), new Date(clockIn.recorded_at));
+          const totalDuration = differenceInMinutes(new Date(clockOut.recorded_at), new Date(clockIn.recorded_at));
+          workDuration = breakDuration ? totalDuration - breakDuration : totalDuration;
         }
 
         result.push({
           employee: emp,
           date: dateStr,
           clockIn: clockIn ? format(new Date(clockIn.recorded_at), 'HH:mm') : null,
+          breakOut: breakOut ? format(new Date(breakOut.recorded_at), 'HH:mm') : null,
+          breakIn: breakIn ? format(new Date(breakIn.recorded_at), 'HH:mm') : null,
           clockOut: clockOut ? format(new Date(clockOut.recorded_at), 'HH:mm') : null,
           lateMinutes,
+          breakDuration,
           workDuration,
           status: clockIn ? 'present' : 'absent',
         });
@@ -533,12 +557,15 @@ const AdminReports = () => {
           [`Diekspor oleh: ${exportedBy}`],
           [`Waktu export: ${exportDate}`],
           [],
-          ['Tanggal', 'Nama', 'Departemen', 'Jam Masuk', 'Jam Pulang', 'Durasi Kerja', 'Telat (menit)', 'Status'],
+          ['Tanggal', 'Nama', 'Departemen', 'Jam Masuk', 'Istirahat Keluar', 'Istirahat Masuk', 'Durasi Istirahat', 'Jam Pulang', 'Durasi Kerja', 'Telat (menit)', 'Status'],
           ...dailyDetailData.map((d) => [
             format(parseISO(d.date), 'dd/MM/yyyy'),
             d.employee.full_name,
             d.employee.department || '-',
             d.clockIn || '-',
+            d.breakOut || '-',
+            d.breakIn || '-',
+            d.breakDuration ? `${d.breakDuration}m` : '-',
             d.clockOut || '-',
             d.workDuration ? `${Math.floor(d.workDuration / 60)}j ${d.workDuration % 60}m` : '-',
             d.lateMinutes > 0 ? d.lateMinutes : 0,
@@ -551,8 +578,8 @@ const AdminReports = () => {
 
         const ws = XLSX.utils.aoa_to_sheet(wsData);
         ws['!cols'] = [
-          { wch: 12 }, { wch: 25 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, 
-          { wch: 14 }, { wch: 14 }, { wch: 10 },
+          { wch: 12 }, { wch: 25 }, { wch: 15 }, { wch: 12 }, { wch: 15 }, 
+          { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 10 },
         ];
         XLSX.utils.book_append_sheet(wb, ws, 'Detail Harian');
       }
@@ -866,6 +893,19 @@ const AdminReports = () => {
                           <TableHead>Tanggal</TableHead>
                           <TableHead>Nama</TableHead>
                           <TableHead className="text-center">Jam Masuk</TableHead>
+                          <TableHead className="text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <Coffee className="h-3 w-3" />
+                              Istirahat Keluar
+                            </div>
+                          </TableHead>
+                          <TableHead className="text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <Coffee className="h-3 w-3" />
+                              Istirahat Masuk
+                            </div>
+                          </TableHead>
+                          <TableHead className="text-center">Durasi Istirahat</TableHead>
                           <TableHead className="text-center">Jam Pulang</TableHead>
                           <TableHead className="text-center">Durasi Kerja</TableHead>
                           <TableHead className="text-center">Telat</TableHead>
@@ -881,6 +921,19 @@ const AdminReports = () => {
                             <TableCell>{d.employee.full_name}</TableCell>
                             <TableCell className="text-center font-mono">
                               {d.clockIn || <span className="text-muted-foreground">-</span>}
+                            </TableCell>
+                            <TableCell className="text-center font-mono">
+                              {d.breakOut || <span className="text-muted-foreground">-</span>}
+                            </TableCell>
+                            <TableCell className="text-center font-mono">
+                              {d.breakIn || <span className="text-muted-foreground">-</span>}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {d.breakDuration ? (
+                                <span className="font-mono text-muted-foreground">{d.breakDuration}m</span>
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
                             </TableCell>
                             <TableCell className="text-center font-mono">
                               {d.clockOut || <span className="text-muted-foreground">-</span>}
