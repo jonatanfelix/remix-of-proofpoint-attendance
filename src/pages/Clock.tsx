@@ -15,9 +15,11 @@ import { MapPin, RefreshCw, ExternalLink, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
+import { type RecordType, type AttendanceStatus } from '@/components/attendance/AttendanceButtons';
+
 interface AttendanceRecord {
   id: string;
-  record_type: 'clock_in' | 'clock_out';
+  record_type: RecordType;
   recorded_at: string;
   photo_url: string | null;
 }
@@ -82,7 +84,7 @@ const Clock = () => {
   } | null>(null);
 
   const [showCamera, setShowCamera] = useState(false);
-  const [pendingRecordType, setPendingRecordType] = useState<'clock_in' | 'clock_out' | null>(null);
+  const [pendingRecordType, setPendingRecordType] = useState<RecordType | null>(null);
 
   // Fetch user profile
   const { data: profile, isLoading: profileLoading } = useQuery({
@@ -149,7 +151,7 @@ const Clock = () => {
     return today.getTime();
   }, []);
 
-  const status = useMemo(() => {
+  const status = useMemo((): AttendanceStatus => {
     if (!recentRecords || recentRecords.length === 0) return 'not_present';
 
     const todayRecords = recentRecords.filter((r) => {
@@ -161,7 +163,10 @@ const Clock = () => {
     if (todayRecords.length === 0) return 'not_present';
 
     const lastRecord = todayRecords[0];
-    return lastRecord.record_type === 'clock_in' ? 'clocked_in' : 'clocked_out';
+    if (lastRecord.record_type === 'clock_out') return 'clocked_out';
+    if (lastRecord.record_type === 'break_out') return 'on_break';
+    if (lastRecord.record_type === 'clock_in' || lastRecord.record_type === 'break_in') return 'clocked_in';
+    return 'not_present';
   }, [recentRecords, todayDateString]);
 
   const todayClockIn = useMemo(() => {
@@ -239,7 +244,7 @@ const Clock = () => {
     refreshLocation();
   }, [refreshLocation]);
 
-  const uploadPhoto = async (imageDataUrl: string, recordType: 'clock_in' | 'clock_out'): Promise<string | null> => {
+  const uploadPhoto = async (imageDataUrl: string, recordType: RecordType): Promise<string | null> => {
     try {
       const base64Data = imageDataUrl.split(',')[1];
       const byteCharacters = atob(base64Data);
@@ -270,7 +275,7 @@ const Clock = () => {
   };
 
   const attendanceMutation = useMutation({
-    mutationFn: async ({ recordType, photoUrl }: { recordType: 'clock_in' | 'clock_out'; photoUrl: string | null }) => {
+    mutationFn: async ({ recordType, photoUrl }: { recordType: RecordType; photoUrl: string | null }) => {
       if (!user?.id || !currentPosition) {
         throw new Error('Lokasi belum tersedia. Silakan refresh lokasi.');
       }
@@ -297,10 +302,10 @@ const Clock = () => {
 
       return data;
     },
-    onSuccess: (_, { recordType }) => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['attendance-records'] });
       toast({
-        title: recordType === 'clock_in' ? 'Berhasil Clock In!' : 'Berhasil Clock Out!',
+        title: data?.message || 'Berhasil!',
         description: `Tercatat pada ${new Date().toLocaleTimeString()}`,
       });
     },
@@ -313,7 +318,7 @@ const Clock = () => {
     },
   });
 
-  const handleClockIn = () => {
+  const handleAction = (recordType: RecordType) => {
     if (!currentPosition) {
       toast({
         title: 'Lokasi Diperlukan',
@@ -341,39 +346,7 @@ const Clock = () => {
       }
     }
 
-    setPendingRecordType('clock_in');
-    setShowCamera(true);
-  };
-
-  const handleClockOut = () => {
-    if (!currentPosition) {
-      toast({
-        title: 'Lokasi Diperlukan',
-        description: 'Silakan tunggu atau refresh lokasi terlebih dahulu.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (profile?.requires_geofence && company?.office_latitude && company?.office_longitude) {
-      const distance = calculateDistance(
-        currentPosition.latitude,
-        currentPosition.longitude,
-        company.office_latitude,
-        company.office_longitude
-      );
-
-      if (distance > company.radius_meters) {
-        toast({
-          title: 'Di Luar Jangkauan',
-          description: `Anda berada ${Math.round(distance)}m dari kantor. Maksimal ${company.radius_meters}m untuk absen.`,
-          variant: 'destructive',
-        });
-        return;
-      }
-    }
-
-    setPendingRecordType('clock_out');
+    setPendingRecordType(recordType);
     setShowCamera(true);
   };
 
@@ -420,9 +393,7 @@ const Clock = () => {
     if (!company?.office_latitude || !company?.office_longitude) return true;
     return isWithinGeofence;
   };
-
-  const canClockIn = currentPosition !== null && status !== 'clocked_in' && geofenceCheck();
-  const canClockOut = currentPosition !== null && status === 'clocked_in' && geofenceCheck();
+  const canPerformAction = currentPosition !== null && geofenceCheck();
 
   if (profileLoading) {
     return (
@@ -609,11 +580,10 @@ const Clock = () => {
 
           {/* Attendance Buttons */}
           <AttendanceButtons
-            canClockIn={canClockIn}
-            canClockOut={canClockOut}
+            status={status}
             isSubmitting={attendanceMutation.isPending}
-            onClockIn={handleClockIn}
-            onClockOut={handleClockOut}
+            canPerformAction={canPerformAction}
+            onAction={handleAction}
           />
         </div>
 
@@ -624,7 +594,12 @@ const Clock = () => {
             onClose={handleCameraClose}
             onCapture={handleCameraCapture}
             employeeName={profile?.full_name || user?.email || 'Employee'}
-            recordType={pendingRecordType === 'clock_in' ? 'CLOCK IN' : 'CLOCK OUT'}
+            recordType={
+              pendingRecordType === 'clock_in' ? 'CLOCK IN' :
+              pendingRecordType === 'clock_out' ? 'CLOCK OUT' :
+              pendingRecordType === 'break_out' ? 'ISTIRAHAT KELUAR' :
+              pendingRecordType === 'break_in' ? 'KEMBALI ISTIRAHAT' : 'ABSENSI'
+            }
             latitude={currentPosition.latitude}
             longitude={currentPosition.longitude}
             isLate={pendingRecordType === 'clock_in' ? currentTimeLateness.isLate : false}

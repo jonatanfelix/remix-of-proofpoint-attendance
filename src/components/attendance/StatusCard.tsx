@@ -1,10 +1,11 @@
-import { Clock, CheckCircle, XCircle, AlertTriangle, Timer } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, AlertTriangle, Timer, Coffee } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { format, differenceInMinutes } from 'date-fns';
+import { type AttendanceStatus } from './AttendanceButtons';
 
 interface StatusCardProps {
-  status: 'not_present' | 'clocked_in' | 'clocked_out';
+  status: AttendanceStatus;
   lastClockIn?: Date | null;
   lastClockOut?: Date | null;
   isLate?: boolean;
@@ -54,6 +55,15 @@ const StatusCard = ({
                 : 'Anda sedang bertugas',
             bgClass: 'bg-accent',
           };
+        case 'on_break':
+          return {
+            icon: <Coffee className="h-8 w-8" />,
+            title: 'Sedang Istirahat',
+            subtitle: lastClockIn
+              ? `Mulai jam ${format(lastClockIn, 'HH:mm')}`
+              : 'Istirahat sejenak',
+            bgClass: 'bg-secondary',
+          };
         case 'clocked_out':
           return {
             icon: <XCircle className="h-8 w-8" />,
@@ -83,6 +93,15 @@ const StatusCard = ({
             ? `Clock in jam ${format(lastClockIn, 'HH:mm')}`
             : 'Anda sedang bertugas',
           bgClass: 'bg-accent',
+        };
+      case 'on_break':
+        return {
+          icon: <Coffee className="h-8 w-8" />,
+          title: 'Sedang Istirahat',
+          subtitle: lastClockIn
+            ? `Clock in jam ${format(lastClockIn, 'HH:mm')}`
+            : 'Istirahat sejenak',
+          bgClass: 'bg-secondary',
         };
       case 'clocked_out':
         return {

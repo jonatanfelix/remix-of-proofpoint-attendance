@@ -8,7 +8,7 @@ interface CameraCaptureProps {
   onClose: () => void;
   onCapture: (imageDataUrl: string) => void;
   employeeName: string;
-  recordType: 'CLOCK IN' | 'CLOCK OUT';
+  recordType: string;
   latitude: number;
   longitude: number;
   isLate?: boolean;
