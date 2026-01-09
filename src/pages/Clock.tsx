@@ -111,20 +111,22 @@ const Clock = () => {
     enabled: !!user?.id,
   });
 
-  // Fetch company settings
+  // Fetch company settings based on user's company_id
   const { data: company } = useQuery({
-    queryKey: ['company-settings'],
+    queryKey: ['company-settings', profile?.company_id],
     queryFn: async () => {
+      if (!profile?.company_id) return null;
+      
       const { data, error } = await supabase
         .from('companies')
         .select('*')
-        .limit(1)
+        .eq('id', profile.company_id)
         .maybeSingle();
 
       if (error) return null;
       return data as CompanySettings | null;
     },
-    enabled: !!user?.id,
+    enabled: !!user?.id && !!profile?.company_id,
   });
 
   // Fetch recent attendance records
