@@ -322,15 +322,64 @@ chmod +x deploy.sh
 
 ---
 
----
-
 ## 📊 Setup Data Awal Supabase
 
-Setelah database dan tabel terbuat, Anda perlu mengisi data awal berikut:
+Setelah database dan tabel terbuat, Anda perlu mengisi data awal. Tersedia **2 file SQL siap pakai**:
 
-### 1. Companies (Perusahaan) - WAJIB
+### 🚀 Cara Cepat (Menggunakan Script)
 
-Minimal 1 company harus ada. Ini adalah data organisasi utama.
+#### Langkah 1: Jalankan Seed Data
+
+Buka Supabase Dashboard → SQL Editor, lalu jalankan file:
+
+```
+📁 supabase/seed.sql
+```
+
+File ini berisi:
+- ✅ 1 Company default dengan konfigurasi lengkap
+- ✅ 4 Shift (Regular, Pagi, Siang, Malam)
+- ✅ 14 Hari libur nasional 2025
+- ✅ 1 Lokasi contoh
+
+#### Langkah 2: Buat User Developer Pertama
+
+1. Buka Supabase Dashboard → **Authentication** → **Users**
+2. Klik **"Add User"**
+3. Isi:
+   - Email: `admin@internal.local`
+   - Password: (password aman, min 6 karakter)
+   - ✅ Centang **"Auto Confirm User"**
+4. Klik **"Create User"**
+5. **Salin UUID** user yang baru dibuat
+
+#### Langkah 3: Konfigurasi User Developer
+
+Buka SQL Editor, lalu jalankan file:
+
+```
+📁 supabase/seed-first-user.sql
+```
+
+> ⚠️ **PENTING**: Ganti `'GANTI_DENGAN_USER_ID'` dengan UUID yang disalin di langkah sebelumnya!
+
+#### Langkah 4: Verifikasi
+
+Jalankan query ini untuk memastikan setup berhasil:
+
+```sql
+-- Cek semua data
+SELECT 'companies' as tabel, count(*) FROM companies
+UNION ALL SELECT 'shifts', count(*) FROM shifts WHERE is_active = true
+UNION ALL SELECT 'holidays', count(*) FROM holidays
+UNION ALL SELECT 'users', count(*) FROM profiles WHERE role = 'developer';
+```
+
+---
+
+### 📝 Cara Manual (Referensi Detail)
+
+Jika ingin input data secara manual, berikut detailnya:
 
 ```sql
 INSERT INTO companies (
