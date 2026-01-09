@@ -25,12 +25,13 @@ let faceDetectorPromise: Promise<any> | null = null;
 
 const getFaceDetector = async () => {
   if (!faceDetectorPromise) {
-    faceDetectorPromise = pipeline('object-detection', 'Xenova/detr-resnet-50', {
+    // Use a dedicated face detection model for accurate face detection
+    faceDetectorPromise = pipeline('object-detection', 'Xenova/yolos-tiny', {
       device: 'webgpu',
     }).catch((err) => {
       // Fallback to CPU if WebGPU not available
       console.log('WebGPU not available, falling back to CPU');
-      return pipeline('object-detection', 'Xenova/detr-resnet-50');
+      return pipeline('object-detection', 'Xenova/yolos-tiny');
     });
   }
   return faceDetectorPromise;
@@ -93,12 +94,30 @@ const CameraCapture = ({
       const results = await detector(imageData);
       setIsDetecting(false);
 
-      // Check if any person detected (DETR detects 'person' class)
-      const personDetected = results.some(
-        (result: any) => result.label === 'person' && result.score > 0.7
-      );
+      console.log('Detection results:', results);
+
+      // Check if any person detected with sufficient size
+      // Person must occupy at least 15% of the frame to be considered valid
+      // This prevents photos on walls or small objects from being detected
+      const minAreaRatio = 0.15;
+      const frameArea = canvas.width * canvas.height;
       
-      setFaceDetected(personDetected);
+      const validPersonDetected = results.some((result: any) => {
+        if (result.label !== 'person' || result.score < 0.6) return false;
+        
+        // Calculate bounding box area
+        const box = result.box;
+        const boxWidth = box.xmax - box.xmin;
+        const boxHeight = box.ymax - box.ymin;
+        const boxArea = boxWidth * boxHeight;
+        const areaRatio = boxArea / frameArea;
+        
+        console.log(`Person detected: score=${result.score.toFixed(2)}, areaRatio=${(areaRatio * 100).toFixed(1)}%`);
+        
+        return areaRatio >= minAreaRatio;
+      });
+      
+      setFaceDetected(validPersonDetected);
       setModelLoading(false);
     } catch (err) {
       console.error('Face detection error:', err);
