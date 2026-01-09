@@ -20,12 +20,13 @@ import {
 } from '@/components/ui/table';
 import { CalendarDays, Plus, Trash2, Edit, Check, X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isSameDay } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
 
 interface Holiday {
   id: string;
   date: string;
+  end_date: string | null;
   name: string;
   description: string | null;
   is_active: boolean;
@@ -36,11 +37,13 @@ const AdminHolidays = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [newDate, setNewDate] = useState('');
+  const [newStartDate, setNewStartDate] = useState('');
+  const [newEndDate, setNewEndDate] = useState('');
   const [newName, setNewName] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [editingHoliday, setEditingHoliday] = useState<Holiday | null>(null);
-  const [editDate, setEditDate] = useState('');
+  const [editStartDate, setEditStartDate] = useState('');
+  const [editEndDate, setEditEndDate] = useState('');
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
 
@@ -81,10 +84,17 @@ const AdminHolidays = () => {
   // Add holiday mutation
   const addMutation = useMutation({
     mutationFn: async () => {
-      if (!newDate || !newName.trim()) throw new Error('Tanggal dan nama harus diisi');
+      if (!newStartDate || !newName.trim()) throw new Error('Tanggal mulai dan nama harus diisi');
+
+      const effectiveEndDate = newEndDate || newStartDate;
+      
+      if (effectiveEndDate < newStartDate) {
+        throw new Error('Tanggal selesai tidak boleh sebelum tanggal mulai');
+      }
 
       const { error } = await supabase.from('holidays').insert({
-        date: newDate,
+        date: newStartDate,
+        end_date: effectiveEndDate,
         name: newName.trim(),
         description: newDescription.trim() || null,
       });
@@ -99,7 +109,8 @@ const AdminHolidays = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['holidays'] });
       toast.success('Hari libur berhasil ditambahkan!');
-      setNewDate('');
+      setNewStartDate('');
+      setNewEndDate('');
       setNewName('');
       setNewDescription('');
     },
@@ -113,10 +124,17 @@ const AdminHolidays = () => {
     mutationFn: async () => {
       if (!editingHoliday) return;
 
+      const effectiveEndDate = editEndDate || editStartDate;
+      
+      if (effectiveEndDate < editStartDate) {
+        throw new Error('Tanggal selesai tidak boleh sebelum tanggal mulai');
+      }
+
       const { error } = await supabase
         .from('holidays')
         .update({
-          date: editDate,
+          date: editStartDate,
+          end_date: effectiveEndDate,
           name: editName.trim(),
           description: editDescription.trim() || null,
         })
@@ -129,7 +147,7 @@ const AdminHolidays = () => {
       toast.success('Hari libur berhasil diperbarui!');
       setEditingHoliday(null);
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast.error('Gagal memperbarui: ' + error.message);
     },
   });
@@ -156,14 +174,16 @@ const AdminHolidays = () => {
 
   const handleEdit = (holiday: Holiday) => {
     setEditingHoliday(holiday);
-    setEditDate(holiday.date);
+    setEditStartDate(holiday.date);
+    setEditEndDate(holiday.end_date || holiday.date);
     setEditName(holiday.name);
     setEditDescription(holiday.description || '');
   };
 
   const handleCancelEdit = () => {
     setEditingHoliday(null);
-    setEditDate('');
+    setEditStartDate('');
+    setEditEndDate('');
     setEditName('');
     setEditDescription('');
   };
@@ -195,10 +215,21 @@ const AdminHolidays = () => {
     );
   }
 
-  // Separate upcoming and past holidays
+  // Separate upcoming and past holidays (consider end_date for upcoming check)
   const today = new Date().toISOString().split('T')[0];
-  const upcomingHolidays = holidays?.filter((h) => h.date >= today) || [];
-  const pastHolidays = holidays?.filter((h) => h.date < today) || [];
+  const upcomingHolidays = holidays?.filter((h) => (h.end_date || h.date) >= today) || [];
+  const pastHolidays = holidays?.filter((h) => (h.end_date || h.date) < today) || [];
+
+  // Helper to format date range
+  const formatDateRange = (startDate: string, endDate: string | null) => {
+    const start = parseISO(startDate);
+    const end = endDate ? parseISO(endDate) : start;
+    
+    if (isSameDay(start, end)) {
+      return format(start, 'EEEE, dd MMM yyyy', { locale: idLocale });
+    }
+    return `${format(start, 'dd MMM yyyy', { locale: idLocale })} - ${format(end, 'dd MMM yyyy', { locale: idLocale })}`;
+  };
 
   return (
     <AppLayout>
@@ -218,16 +249,29 @@ const AdminHolidays = () => {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleAdd} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="newDate">Tanggal</Label>
+                  <Label htmlFor="newStartDate">Tanggal Mulai</Label>
                   <Input
-                    id="newDate"
+                    id="newStartDate"
                     type="date"
-                    value={newDate}
-                    onChange={(e) => setNewDate(e.target.value)}
+                    value={newStartDate}
+                    onChange={(e) => setNewStartDate(e.target.value)}
                     className="border-2 border-foreground"
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="newEndDate">Tanggal Selesai</Label>
+                  <Input
+                    id="newEndDate"
+                    type="date"
+                    value={newEndDate}
+                    onChange={(e) => setNewEndDate(e.target.value)}
+                    min={newStartDate}
+                    placeholder="Sama dengan tanggal mulai"
+                    className="border-2 border-foreground"
+                  />
+                  <p className="text-xs text-muted-foreground">Kosongkan jika hanya 1 hari</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="newName">Nama Hari Libur</Label>
@@ -252,7 +296,7 @@ const AdminHolidays = () => {
               </div>
               <Button
                 type="submit"
-                disabled={addMutation.isPending || !newDate || !newName.trim()}
+                disabled={addMutation.isPending || !newStartDate || !newName.trim()}
                 className="border-2 border-foreground"
               >
                 {addMutation.isPending ? (
@@ -302,12 +346,19 @@ const AdminHolidays = () => {
                       <TableRow key={holiday.id}>
                         {editingHoliday?.id === holiday.id ? (
                           <>
-                            <TableCell>
+                            <TableCell className="space-y-2">
                               <Input
                                 type="date"
-                                value={editDate}
-                                onChange={(e) => setEditDate(e.target.value)}
-                                className="w-40"
+                                value={editStartDate}
+                                onChange={(e) => setEditStartDate(e.target.value)}
+                                className="w-36"
+                              />
+                              <Input
+                                type="date"
+                                value={editEndDate}
+                                onChange={(e) => setEditEndDate(e.target.value)}
+                                min={editStartDate}
+                                className="w-36"
                               />
                             </TableCell>
                             <TableCell>
@@ -345,7 +396,7 @@ const AdminHolidays = () => {
                         ) : (
                           <>
                             <TableCell className="font-medium">
-                              {format(parseISO(holiday.date), 'EEEE, dd MMM yyyy', { locale: idLocale })}
+                              {formatDateRange(holiday.date, holiday.end_date)}
                             </TableCell>
                             <TableCell>{holiday.name}</TableCell>
                             <TableCell className="text-muted-foreground">
@@ -407,7 +458,7 @@ const AdminHolidays = () => {
                     {pastHolidays.map((holiday) => (
                       <TableRow key={holiday.id} className="opacity-60">
                         <TableCell className="font-medium">
-                          {format(parseISO(holiday.date), 'EEEE, dd MMM yyyy', { locale: idLocale })}
+                          {formatDateRange(holiday.date, holiday.end_date)}
                         </TableCell>
                         <TableCell>{holiday.name}</TableCell>
                         <TableCell className="text-muted-foreground">
