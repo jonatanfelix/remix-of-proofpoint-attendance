@@ -47,6 +47,7 @@ interface CompanySettings {
   office_longitude: number | null;
   radius_meters: number;
   work_start_time: string;
+  grace_period_minutes: number;
 }
 
 // Calculate distance between two coordinates in meters (Haversine formula)
@@ -188,7 +189,9 @@ const Clock = () => {
     return '08:00:00';
   }, [profile?.shift?.start_time, company?.work_start_time]);
 
-  // Calculate lateness - ONLY for office employees
+  // Calculate lateness - ONLY for office employees, considering grace period
+  const gracePeriodMinutes = company?.grace_period_minutes || 0;
+  
   const calculateLateness = useCallback((checkCurrentTime: boolean = false) => {
     // Field employees don't have lateness - they work based on duration
     if (profile?.employee_type === 'field') {
@@ -201,8 +204,11 @@ const Clock = () => {
     const workStartToday = new Date(now);
     workStartToday.setHours(hours, minutes, 0, 0);
 
+    // Add grace period to work start time
+    const graceEndTime = new Date(workStartToday.getTime() + gracePeriodMinutes * 60000);
+
     if (checkCurrentTime) {
-      const diffMs = now.getTime() - workStartToday.getTime();
+      const diffMs = now.getTime() - graceEndTime.getTime();
       const diffMinutes = Math.floor(diffMs / 60000);
       return {
         isLate: diffMinutes > 0,
@@ -213,14 +219,14 @@ const Clock = () => {
     if (!todayClockIn) return { isLate: false, lateMinutes: 0 };
 
     const clockInTime = new Date(todayClockIn.recorded_at);
-    const diffMs = clockInTime.getTime() - workStartToday.getTime();
+    const diffMs = clockInTime.getTime() - graceEndTime.getTime();
     const diffMinutes = Math.floor(diffMs / 60000);
 
     return {
       isLate: diffMinutes > 0,
       lateMinutes: diffMinutes > 0 ? diffMinutes : 0,
     };
-  }, [todayClockIn, effectiveWorkStartTime, profile?.employee_type]);
+  }, [todayClockIn, effectiveWorkStartTime, profile?.employee_type, gracePeriodMinutes]);
 
   const { isLate, lateMinutes } = calculateLateness(false);
   const currentTimeLateness = calculateLateness(true);
