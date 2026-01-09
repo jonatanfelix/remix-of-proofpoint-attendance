@@ -127,8 +127,8 @@ const CameraCapture = ({
     } catch (err) {
       console.error('Face detection error:', err);
       setModelLoading(false);
-      // Allow capture even if detection fails
-      setFaceDetected(true);
+      // On error, show warning but don't auto-allow - require manual override
+      setFaceDetected(false);
     }
   }, [isReady]);
 
@@ -166,7 +166,7 @@ const CameraCapture = ({
         setModelLoading(false);
       }).catch(() => {
         setModelLoading(false);
-        setFaceDetected(true); // Allow if model fails to load
+        // Don't auto-allow on model load failure - show warning instead
       });
 
     } catch (err) {
@@ -290,12 +290,12 @@ const CameraCapture = ({
     // Get the watermarked image
     const imageDataUrl = canvas.toDataURL('image/jpeg', 0.85);
     
-    // Stop camera before closing
+    // Stop camera but don't close - let parent handle close after mutation
     stopCamera();
     
     onCapture(imageDataUrl);
-    onClose();
-  }, [employeeName, recordType, latitude, longitude, isLate, lateMinutes, onCapture, onClose, stopCamera]);
+    // Don't call onClose here - parent will close after mutation completes
+  }, [employeeName, recordType, latitude, longitude, isLate, lateMinutes, onCapture, stopCamera]);
 
   const handleClose = useCallback(() => {
     stopCamera();
@@ -378,20 +378,36 @@ const CameraCapture = ({
                 <Alert variant="destructive" className="mb-4">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
-                    Pastikan wajah Anda terlihat jelas di kamera sebelum mengambil foto.
+                    Wajah tidak terdeteksi. Pastikan wajah Anda terlihat jelas di kamera. 
+                    Jika masalah berlanjut, tekan tombol tetap ambil foto.
                   </AlertDescription>
                 </Alert>
               )}
 
-              <Button
-                onClick={capturePhoto}
-                className="w-full"
-                size="lg"
-                disabled={isLoading || !isReady || (!faceDetected && !modelLoading)}
-              >
-                <Camera className="h-5 w-5 mr-2" />
-                {modelLoading ? 'Memuat...' : faceDetected ? 'Ambil Foto' : 'Arahkan Wajah ke Kamera'}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  onClick={capturePhoto}
+                  className="flex-1"
+                  size="lg"
+                  disabled={isLoading || !isReady || (!faceDetected && !modelLoading)}
+                >
+                  <Camera className="h-5 w-5 mr-2" />
+                  {modelLoading ? 'Memuat...' : faceDetected ? 'Ambil Foto' : 'Arahkan Wajah ke Kamera'}
+                </Button>
+                
+                {/* Fallback button if face detection fails but user wants to proceed */}
+                {isReady && !modelLoading && !faceDetected && (
+                  <Button
+                    onClick={capturePhoto}
+                    variant="outline"
+                    size="lg"
+                    className="border-2 border-foreground"
+                    disabled={isLoading || !isReady}
+                  >
+                    Tetap Ambil
+                  </Button>
+                )}
+              </div>
             </>
           )}
 

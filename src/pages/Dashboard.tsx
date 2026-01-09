@@ -270,29 +270,39 @@ const Dashboard = () => {
     refreshLocation();
   }, [refreshLocation]);
 
-  const uploadPhoto = async (imageDataUrl: string, recordType: RecordType): Promise<string | null> => {
-    try {
-      const base64Data = imageDataUrl.split(',')[1];
-      const byteCharacters = atob(base64Data);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: 'image/jpeg' });
-      const fileName = `${user?.id}/${Date.now()}_${recordType}.jpg`;
-      const { error } = await supabase.storage
-        .from('attendance-photos')
-        .upload(fileName, blob, { contentType: 'image/jpeg' });
-      if (error) throw error;
-      const { data: urlData } = supabase.storage
-        .from('attendance-photos')
-        .getPublicUrl(fileName);
-      return urlData.publicUrl;
-    } catch (err) {
-      console.error('Photo upload error:', err);
-      return null;
+  // Upload photo with retry mechanism
+  const uploadPhoto = async (imageDataUrl: string, recordType: RecordType, maxRetries = 3): Promise<string | null> => {
+    const base64Data = imageDataUrl.split(',')[1];
+    const byteCharacters = atob(base64Data);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
     }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: 'image/jpeg' });
+    const fileName = `${user?.id}/${Date.now()}_${recordType}.jpg`;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const { error } = await supabase.storage
+          .from('attendance-photos')
+          .upload(fileName, blob, { contentType: 'image/jpeg' });
+        
+        if (error) throw error;
+        
+        const { data: urlData } = supabase.storage
+          .from('attendance-photos')
+          .getPublicUrl(fileName);
+        
+        return urlData.publicUrl;
+      } catch (err) {
+        console.error(`Photo upload attempt ${attempt + 1} failed:`, err);
+        if (attempt < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+        }
+      }
+    }
+    return null;
   };
 
   const attendanceMutation = useMutation({
@@ -318,12 +328,14 @@ const Dashboard = () => {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['attendance-records'] });
+      setShowCamera(false);
       toast({
         title: data?.message || 'Berhasil!',
         description: `Tercatat pada ${new Date().toLocaleTimeString()}`,
       });
     },
     onError: (error: Error) => {
+      setShowCamera(false);
       toast({
         title: 'Error',
         description: error.message || 'Gagal mencatat absensi',
@@ -370,7 +382,7 @@ const Dashboard = () => {
     if (!photoUrl) {
       toast({
         title: 'Error',
-        description: 'Gagal mengupload foto. Silakan coba lagi.',
+        description: 'Gagal mengupload foto setelah 3 percobaan. Silakan coba lagi.',
         variant: 'destructive',
       });
       setShowCamera(false);
@@ -378,14 +390,17 @@ const Dashboard = () => {
       return;
     }
 
-    // Submit attendance record
-    attendanceMutation.mutate({ recordType: pendingRecordType, photoUrl });
+    // Submit attendance record - camera will close via onSuccess/onError
+    const recordType = pendingRecordType;
     setPendingRecordType(null);
+    attendanceMutation.mutate({ recordType, photoUrl });
   };
 
   const handleCameraClose = () => {
-    setShowCamera(false);
-    setPendingRecordType(null);
+    if (!attendanceMutation.isPending) {
+      setShowCamera(false);
+      setPendingRecordType(null);
+    }
   };
 
   // Calculate distance to office for display
