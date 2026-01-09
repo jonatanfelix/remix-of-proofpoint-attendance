@@ -26,10 +26,12 @@ import {
 } from '@/components/ui/select';
 import { 
   Download, FileSpreadsheet, Calendar, Users, Clock, 
-  AlertTriangle, XCircle, LogOut as EarlyLeaveIcon, Loader2 
+  AlertTriangle, XCircle, LogOut as EarlyLeaveIcon, Loader2,
+  Coffee
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, parseISO, differenceInMinutes, isWeekend } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, parseISO, differenceInMinutes, isWeekend, startOfWeek, endOfWeek, subWeeks, addWeeks
+ } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
 
@@ -89,10 +91,9 @@ interface DailyDetail {
   employee: Employee;
   date: string;
   clockIn: string | null;
-  breakOut: string | null;
-  breakIn: string | null;
   clockOut: string | null;
   lateMinutes: number;
+  workDuration: number | null; // in minutes
   status: 'present' | 'absent' | 'leave' | 'holiday' | 'weekend';
   leaveType?: string;
 }
@@ -100,8 +101,9 @@ const AdminReports = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
-  const [reportType, setReportType] = useState<'monthly' | 'daily'>('monthly');
-  const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [reportType, setReportType] = useState<'monthly' | 'daily'>('daily');
+  const [periodType, setPeriodType] = useState<'monthly' | 'weekly'>('monthly');
+  const [selectedWeek, setSelectedWeek] = useState(format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'));
   const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
   const [isExporting, setIsExporting] = useState(false);
 
@@ -374,10 +376,9 @@ const AdminReports = () => {
             employee: emp,
             date: dateStr,
             clockIn: null,
-            breakOut: null,
-            breakIn: null,
             clockOut: null,
             lateMinutes: 0,
+            workDuration: null,
             status: 'weekend',
           });
           return;
@@ -389,10 +390,9 @@ const AdminReports = () => {
             employee: emp,
             date: dateStr,
             clockIn: null,
-            breakOut: null,
-            breakIn: null,
             clockOut: null,
             lateMinutes: 0,
+            workDuration: null,
             status: 'holiday',
           });
           return;
@@ -407,10 +407,9 @@ const AdminReports = () => {
             employee: emp,
             date: dateStr,
             clockIn: null,
-            breakOut: null,
-            breakIn: null,
             clockOut: null,
             lateMinutes: 0,
+            workDuration: null,
             status: 'leave',
             leaveType: empLeave.leave_type,
           });
@@ -423,8 +422,6 @@ const AdminReports = () => {
         ) || [];
 
         const clockIn = dayAttendance.find(a => a.record_type === 'clock_in');
-        const breakOut = dayAttendance.find(a => a.record_type === 'break_out');
-        const breakIn = dayAttendance.find(a => a.record_type === 'break_in');
         const clockOut = dayAttendance.find(a => a.record_type === 'clock_out');
 
         let lateMinutes = 0;
@@ -437,14 +434,19 @@ const AdminReports = () => {
           }
         }
 
+        // Calculate work duration (clock out - clock in)
+        let workDuration: number | null = null;
+        if (clockIn && clockOut) {
+          workDuration = differenceInMinutes(new Date(clockOut.recorded_at), new Date(clockIn.recorded_at));
+        }
+
         result.push({
           employee: emp,
           date: dateStr,
           clockIn: clockIn ? format(new Date(clockIn.recorded_at), 'HH:mm') : null,
-          breakOut: breakOut ? format(new Date(breakOut.recorded_at), 'HH:mm') : null,
-          breakIn: breakIn ? format(new Date(breakIn.recorded_at), 'HH:mm') : null,
           clockOut: clockOut ? format(new Date(clockOut.recorded_at), 'HH:mm') : null,
           lateMinutes,
+          workDuration,
           status: clockIn ? 'present' : 'absent',
         });
       });
@@ -476,56 +478,88 @@ const AdminReports = () => {
 
   // Export to Excel
   const exportToXLSX = async () => {
-    if (!recapData.length) return;
-
     setIsExporting(true);
     try {
       const exportedBy = userProfile?.full_name || user?.email || 'Unknown';
       const exportDate = format(new Date(), 'dd-MM-yyyy HH:mm:ss');
       const monthLabel = format(parseISO(`${selectedMonth}-01`), 'MMMM yyyy', { locale: idLocale });
 
-      const wsData = [
-        [`Laporan Rekapitulasi Kehadiran - GeoAttend`],
-        [`Periode: ${monthLabel}`],
-        [`Diekspor oleh: ${exportedBy}`],
-        [`Waktu export: ${exportDate}`],
-        [],
-        [
-          'Nama', 'Departemen', 'Tipe', 'Hari Kerja', 'Hadir', 'Terlambat', 
-          'Total Telat (menit)', 'Pulang Cepat', 'Total Cepat (menit)', 
-          'Alpa', 'Cuti', 'Sakit', 'Izin', 'Libur', 'Weekend'
-        ],
-        ...recapData.map((r) => [
-          r.employee.full_name,
-          r.employee.department || '-',
-          r.employee.employee_type === 'office' ? 'Kantor' : 'Lapangan',
-          r.totalDays - r.weekendDays - r.holidayDays,
-          r.presentDays,
-          r.lateDays,
-          r.totalLateMinutes,
-          r.earlyLeaveDays,
-          r.totalEarlyMinutes,
-          r.absentDays,
-          r.leaveDays,
-          r.sickDays,
-          r.permitDays,
-          r.holidayDays,
-          r.weekendDays,
-        ]),
-      ];
-
       const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.aoa_to_sheet(wsData);
 
-      ws['!cols'] = [
-        { wch: 25 }, { wch: 15 }, { wch: 10 }, { wch: 12 }, { wch: 8 },
-        { wch: 10 }, { wch: 18 }, { wch: 14 }, { wch: 18 },
-        { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 },
-      ];
+      if (reportType === 'monthly') {
+        // Monthly recap export
+        const wsData = [
+          [`Laporan Rekapitulasi Kehadiran - GeoAttend`],
+          [`Periode: ${monthLabel}`],
+          [`Diekspor oleh: ${exportedBy}`],
+          [`Waktu export: ${exportDate}`],
+          [],
+          [
+            'Nama', 'Departemen', 'Tipe', 'Hari Kerja', 'Hadir', 'Terlambat', 
+            'Total Telat (menit)', 'Pulang Cepat', 'Total Cepat (menit)', 
+            'Alpa', 'Cuti', 'Sakit', 'Izin', 'Libur', 'Weekend'
+          ],
+          ...recapData.map((r) => [
+            r.employee.full_name,
+            r.employee.department || '-',
+            r.employee.employee_type === 'office' ? 'Kantor' : 'Lapangan',
+            r.totalDays - r.weekendDays - r.holidayDays,
+            r.presentDays,
+            r.lateDays,
+            r.totalLateMinutes,
+            r.earlyLeaveDays,
+            r.totalEarlyMinutes,
+            r.absentDays,
+            r.leaveDays,
+            r.sickDays,
+            r.permitDays,
+            r.holidayDays,
+            r.weekendDays,
+          ]),
+        ];
 
-      XLSX.utils.book_append_sheet(wb, ws, 'Rekapitulasi');
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        ws['!cols'] = [
+          { wch: 25 }, { wch: 15 }, { wch: 10 }, { wch: 12 }, { wch: 8 },
+          { wch: 10 }, { wch: 18 }, { wch: 14 }, { wch: 18 },
+          { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 },
+        ];
+        XLSX.utils.book_append_sheet(wb, ws, 'Rekapitulasi');
+      } else {
+        // Daily detail export
+        const wsData = [
+          [`Laporan Detail Harian Kehadiran - GeoAttend`],
+          [`Periode: ${monthLabel}`],
+          [`Diekspor oleh: ${exportedBy}`],
+          [`Waktu export: ${exportDate}`],
+          [],
+          ['Tanggal', 'Nama', 'Departemen', 'Jam Masuk', 'Jam Pulang', 'Durasi Kerja', 'Telat (menit)', 'Status'],
+          ...dailyDetailData.map((d) => [
+            format(parseISO(d.date), 'dd/MM/yyyy'),
+            d.employee.full_name,
+            d.employee.department || '-',
+            d.clockIn || '-',
+            d.clockOut || '-',
+            d.workDuration ? `${Math.floor(d.workDuration / 60)}j ${d.workDuration % 60}m` : '-',
+            d.lateMinutes > 0 ? d.lateMinutes : 0,
+            d.status === 'present' ? 'Hadir' : 
+            d.status === 'absent' ? 'Alpa' : 
+            d.status === 'leave' ? (d.leaveType === 'sakit' ? 'Sakit' : d.leaveType === 'izin' ? 'Izin' : 'Cuti') :
+            d.status === 'holiday' ? 'Libur' : 'Weekend',
+          ]),
+        ];
 
-      const fileName = `Rekap_Kehadiran_${selectedMonth}`;
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        ws['!cols'] = [
+          { wch: 12 }, { wch: 25 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, 
+          { wch: 14 }, { wch: 14 }, { wch: 10 },
+        ];
+        XLSX.utils.book_append_sheet(wb, ws, 'Detail Harian');
+      }
+
+      const fileName = reportType === 'monthly' 
+        ? `Rekap_Kehadiran_${selectedMonth}` 
+        : `Detail_Kehadiran_${selectedMonth}`;
 
       // Log audit
       await supabase.rpc('log_audit_event', {
@@ -534,11 +568,12 @@ const AdminReports = () => {
         p_user_role: userRole,
         p_company_id: userProfile?.company_id,
         p_action: 'export_data',
-        p_resource_type: 'monthly_report',
+        p_resource_type: reportType === 'monthly' ? 'monthly_report' : 'daily_report',
         p_resource_id: fileName,
         p_details: {
           month: selectedMonth,
-          employee_count: recapData.length,
+          report_type: reportType,
+          employee_count: reportType === 'monthly' ? recapData.length : dailyDetailData.length,
         },
         p_ip_address: null,
         p_user_agent: navigator.userAgent,
@@ -595,7 +630,7 @@ const AdminReports = () => {
             </div>
             <Button 
               onClick={exportToXLSX} 
-              disabled={!recapData.length || isExporting}
+              disabled={(reportType === 'monthly' ? !recapData.length : !dailyDetailData.length) || isExporting}
               className="border-2 border-foreground"
             >
               {isExporting ? (
@@ -831,9 +866,9 @@ const AdminReports = () => {
                           <TableHead>Tanggal</TableHead>
                           <TableHead>Nama</TableHead>
                           <TableHead className="text-center">Jam Masuk</TableHead>
-                          <TableHead className="text-center">Istirahat Keluar</TableHead>
-                          <TableHead className="text-center">Istirahat Masuk</TableHead>
                           <TableHead className="text-center">Jam Pulang</TableHead>
+                          <TableHead className="text-center">Durasi Kerja</TableHead>
+                          <TableHead className="text-center">Telat</TableHead>
                           <TableHead className="text-center">Status</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -844,28 +879,31 @@ const AdminReports = () => {
                               {format(parseISO(d.date), 'EEE, dd MMM', { locale: idLocale })}
                             </TableCell>
                             <TableCell>{d.employee.full_name}</TableCell>
+                            <TableCell className="text-center font-mono">
+                              {d.clockIn || <span className="text-muted-foreground">-</span>}
+                            </TableCell>
+                            <TableCell className="text-center font-mono">
+                              {d.clockOut || <span className="text-muted-foreground">-</span>}
+                            </TableCell>
                             <TableCell className="text-center">
-                              {d.clockIn ? (
-                                <div className="flex flex-col items-center">
-                                  <span className="font-mono">{d.clockIn}</span>
-                                  {d.lateMinutes > 0 && (
-                                    <Badge variant="secondary" className="text-xs bg-yellow-100 text-yellow-800">
-                                      +{d.lateMinutes}m
-                                    </Badge>
-                                  )}
-                                </div>
+                              {d.workDuration ? (
+                                <span className="font-mono">
+                                  {Math.floor(d.workDuration / 60)}j {d.workDuration % 60}m
+                                </span>
                               ) : (
                                 <span className="text-muted-foreground">-</span>
                               )}
                             </TableCell>
-                            <TableCell className="text-center font-mono">
-                              {d.breakOut || <span className="text-muted-foreground">-</span>}
-                            </TableCell>
-                            <TableCell className="text-center font-mono">
-                              {d.breakIn || <span className="text-muted-foreground">-</span>}
-                            </TableCell>
-                            <TableCell className="text-center font-mono">
-                              {d.clockOut || <span className="text-muted-foreground">-</span>}
+                            <TableCell className="text-center">
+                              {d.lateMinutes > 0 ? (
+                                <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
+                                  +{d.lateMinutes}m
+                                </Badge>
+                              ) : d.status === 'present' ? (
+                                <Badge variant="outline" className="bg-green-100 text-green-800">Tepat</Badge>
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
                             </TableCell>
                             <TableCell className="text-center">
                               {d.status === 'present' && <Badge variant="default">Hadir</Badge>}
