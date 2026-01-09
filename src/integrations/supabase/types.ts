@@ -111,31 +111,46 @@ export type Database = {
       }
       companies: {
         Row: {
+          annual_leave_quota: number
           created_at: string
+          early_leave_deduction_per_minute: number
+          grace_period_minutes: number
           id: string
           name: string
           office_latitude: number | null
           office_longitude: number | null
+          overtime_rate_per_hour: number
+          overtime_start_after_minutes: number
           radius_meters: number
           updated_at: string
           work_start_time: string
         }
         Insert: {
+          annual_leave_quota?: number
           created_at?: string
+          early_leave_deduction_per_minute?: number
+          grace_period_minutes?: number
           id?: string
           name: string
           office_latitude?: number | null
           office_longitude?: number | null
+          overtime_rate_per_hour?: number
+          overtime_start_after_minutes?: number
           radius_meters?: number
           updated_at?: string
           work_start_time?: string
         }
         Update: {
+          annual_leave_quota?: number
           created_at?: string
+          early_leave_deduction_per_minute?: number
+          grace_period_minutes?: number
           id?: string
           name?: string
           office_latitude?: number | null
           office_longitude?: number | null
+          overtime_rate_per_hour?: number
+          overtime_start_after_minutes?: number
           radius_meters?: number
           updated_at?: string
           work_start_time?: string
@@ -268,6 +283,7 @@ export type Database = {
           id: string
           is_active: boolean
           job_title: string | null
+          leave_balance: number
           requires_geofence: boolean
           role: Database["public"]["Enums"]["app_role"]
           shift_id: string | null
@@ -286,6 +302,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           job_title?: string | null
+          leave_balance?: number
           requires_geofence?: boolean
           role?: Database["public"]["Enums"]["app_role"]
           shift_id?: string | null
@@ -304,6 +321,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           job_title?: string | null
+          leave_balance?: number
           requires_geofence?: boolean
           role?: Database["public"]["Enums"]["app_role"]
           shift_id?: string | null
@@ -330,6 +348,7 @@ export type Database = {
       }
       shifts: {
         Row: {
+          break_duration_minutes: number
           created_at: string
           end_time: string
           id: string
@@ -337,8 +356,10 @@ export type Database = {
           name: string
           start_time: string
           updated_at: string
+          working_days: number[]
         }
         Insert: {
+          break_duration_minutes?: number
           created_at?: string
           end_time: string
           id?: string
@@ -346,8 +367,10 @@ export type Database = {
           name: string
           start_time: string
           updated_at?: string
+          working_days?: number[]
         }
         Update: {
+          break_duration_minutes?: number
           created_at?: string
           end_time?: string
           id?: string
@@ -355,6 +378,7 @@ export type Database = {
           name?: string
           start_time?: string
           updated_at?: string
+          working_days?: number[]
         }
         Relationships: []
       }

@@ -23,7 +23,19 @@ interface Shift {
   start_time: string;
   end_time: string;
   is_active: boolean;
+  working_days: number[];
+  break_duration_minutes: number;
 }
+
+const DAYS_OF_WEEK = [
+  { value: 0, label: 'Min', fullLabel: 'Minggu' },
+  { value: 1, label: 'Sen', fullLabel: 'Senin' },
+  { value: 2, label: 'Sel', fullLabel: 'Selasa' },
+  { value: 3, label: 'Rab', fullLabel: 'Rabu' },
+  { value: 4, label: 'Kam', fullLabel: 'Kamis' },
+  { value: 5, label: 'Jum', fullLabel: 'Jumat' },
+  { value: 6, label: 'Sab', fullLabel: 'Sabtu' },
+];
 
 // Fix for default marker icon
 delete (L.Icon.Default.prototype as { _getIconUrl?: () => string })._getIconUrl;
@@ -40,6 +52,11 @@ interface CompanySettings {
   office_longitude: number | null;
   radius_meters: number;
   work_start_time: string;
+  grace_period_minutes: number;
+  annual_leave_quota: number;
+  overtime_start_after_minutes: number;
+  overtime_rate_per_hour: number;
+  early_leave_deduction_per_minute: number;
 }
 
 const AdminSettings = () => {
@@ -52,6 +69,11 @@ const AdminSettings = () => {
   const [longitude, setLongitude] = useState<number | null>(null);
   const [radius, setRadius] = useState(100);
   const [workStartTime, setWorkStartTime] = useState('08:00');
+  const [gracePeriod, setGracePeriod] = useState(0);
+  const [annualLeaveQuota, setAnnualLeaveQuota] = useState(12);
+  const [overtimeStartAfter, setOvertimeStartAfter] = useState(0);
+  const [overtimeRate, setOvertimeRate] = useState(0);
+  const [earlyLeaveDeduction, setEarlyLeaveDeduction] = useState(0);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [mapReady, setMapReady] = useState(false);
 
@@ -66,10 +88,14 @@ const AdminSettings = () => {
   const [newShiftName, setNewShiftName] = useState('');
   const [newShiftStart, setNewShiftStart] = useState('08:00');
   const [newShiftEnd, setNewShiftEnd] = useState('17:00');
+  const [newShiftWorkingDays, setNewShiftWorkingDays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [newShiftBreakDuration, setNewShiftBreakDuration] = useState(60);
   const [editingShift, setEditingShift] = useState<Shift | null>(null);
   const [editShiftName, setEditShiftName] = useState('');
   const [editShiftStart, setEditShiftStart] = useState('');
   const [editShiftEnd, setEditShiftEnd] = useState('');
+  const [editShiftWorkingDays, setEditShiftWorkingDays] = useState<number[]>([]);
+  const [editShiftBreakDuration, setEditShiftBreakDuration] = useState(60);
 
   // Check if user is admin
   const { data: userRole, isLoading: roleLoading } = useQuery({
@@ -131,6 +157,11 @@ const AdminSettings = () => {
       setRadius(company.radius_meters);
       radiusRef.current = company.radius_meters;
       setWorkStartTime(company.work_start_time?.slice(0, 5) || '08:00');
+      setGracePeriod(company.grace_period_minutes || 0);
+      setAnnualLeaveQuota(company.annual_leave_quota || 12);
+      setOvertimeStartAfter(company.overtime_start_after_minutes || 0);
+      setOvertimeRate(company.overtime_rate_per_hour || 0);
+      setEarlyLeaveDeduction(company.early_leave_deduction_per_minute || 0);
     }
   }, [company]);
 
@@ -152,6 +183,11 @@ const AdminSettings = () => {
           office_longitude: longitude,
           radius_meters: radius,
           work_start_time: workStartTime,
+          grace_period_minutes: gracePeriod,
+          annual_leave_quota: annualLeaveQuota,
+          overtime_start_after_minutes: overtimeStartAfter,
+          overtime_rate_per_hour: overtimeRate,
+          early_leave_deduction_per_minute: earlyLeaveDeduction,
         })
         .eq('id', company.id);
       
@@ -234,6 +270,7 @@ const AdminSettings = () => {
   const addShiftMutation = useMutation({
     mutationFn: async () => {
       if (!newShiftName.trim()) throw new Error('Nama shift harus diisi');
+      if (newShiftWorkingDays.length === 0) throw new Error('Pilih minimal 1 hari kerja');
       
       const { error } = await supabase
         .from('shifts')
@@ -241,6 +278,8 @@ const AdminSettings = () => {
           name: newShiftName.trim(),
           start_time: newShiftStart,
           end_time: newShiftEnd,
+          working_days: newShiftWorkingDays,
+          break_duration_minutes: newShiftBreakDuration,
         });
       
       if (error) throw error;
@@ -251,6 +290,8 @@ const AdminSettings = () => {
       setNewShiftName('');
       setNewShiftStart('08:00');
       setNewShiftEnd('17:00');
+      setNewShiftWorkingDays([1, 2, 3, 4, 5]);
+      setNewShiftBreakDuration(60);
     },
     onError: (error) => {
       toast.error('Gagal menambah shift: ' + error.message);
@@ -267,6 +308,8 @@ const AdminSettings = () => {
           name: editShiftName.trim(),
           start_time: editShiftStart,
           end_time: editShiftEnd,
+          working_days: editShiftWorkingDays,
+          break_duration_minutes: editShiftBreakDuration,
         })
         .eq('id', editingShift.id);
       
@@ -305,6 +348,8 @@ const AdminSettings = () => {
     setEditShiftName(shift.name);
     setEditShiftStart(shift.start_time.slice(0, 5));
     setEditShiftEnd(shift.end_time.slice(0, 5));
+    setEditShiftWorkingDays(shift.working_days || [1, 2, 3, 4, 5]);
+    setEditShiftBreakDuration(shift.break_duration_minutes || 60);
   };
 
   const handleCancelEditShift = () => {
@@ -312,6 +357,20 @@ const AdminSettings = () => {
     setEditShiftName('');
     setEditShiftStart('');
     setEditShiftEnd('');
+    setEditShiftWorkingDays([]);
+    setEditShiftBreakDuration(60);
+  };
+
+  const toggleWorkingDay = (day: number, isNew: boolean) => {
+    if (isNew) {
+      setNewShiftWorkingDays(prev => 
+        prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day].sort()
+      );
+    } else {
+      setEditShiftWorkingDays(prev => 
+        prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day].sort()
+      );
+    }
   };
 
   // Initialize map only once, separately from data
@@ -470,7 +529,7 @@ const AdminSettings = () => {
               <div className="space-y-2">
                 <Label htmlFor="work-start" className="flex items-center gap-2">
                   <Clock className="h-4 w-4" />
-                  Jam Mulai Kerja
+                  Jam Mulai Kerja Default
                 </Label>
                 <Input
                   id="work-start"
@@ -480,7 +539,23 @@ const AdminSettings = () => {
                   className="border-2 border-foreground"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Karyawan yang clock in setelah jam ini akan ditandai "TERLAMBAT"
+                  Digunakan jika karyawan tidak memiliki shift
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="grace-period">Toleransi Keterlambatan (menit)</Label>
+                <Input
+                  id="grace-period"
+                  type="number"
+                  min={0}
+                  max={60}
+                  value={gracePeriod}
+                  onChange={(e) => setGracePeriod(Number(e.target.value))}
+                  className="border-2 border-foreground"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Contoh: 15 menit = tidak dihitung terlambat jika masuk s/d 08:15
                 </p>
               </div>
 
@@ -500,6 +575,75 @@ const AdminSettings = () => {
                 />
                 <p className="text-xs text-muted-foreground">
                   Jarak maksimal karyawan dari titik kantor untuk bisa absen
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Operational Settings */}
+          <Card className="border-2 border-foreground">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Pengaturan Operasional
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="annual-leave">Kuota Cuti Tahunan (hari)</Label>
+                <Input
+                  id="annual-leave"
+                  type="number"
+                  min={0}
+                  max={30}
+                  value={annualLeaveQuota}
+                  onChange={(e) => setAnnualLeaveQuota(Number(e.target.value))}
+                  className="border-2 border-foreground"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Jumlah hari cuti yang diberikan per karyawan per tahun
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="overtime-start">Lembur Mulai Setelah (menit)</Label>
+                <Input
+                  id="overtime-start"
+                  type="number"
+                  min={0}
+                  value={overtimeStartAfter}
+                  onChange={(e) => setOvertimeStartAfter(Number(e.target.value))}
+                  className="border-2 border-foreground"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Contoh: 30 = lembur dihitung setelah 30 menit dari jam pulang shift
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="overtime-rate">Rate Lembur per Jam (Rp)</Label>
+                <Input
+                  id="overtime-rate"
+                  type="number"
+                  min={0}
+                  value={overtimeRate}
+                  onChange={(e) => setOvertimeRate(Number(e.target.value))}
+                  className="border-2 border-foreground"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="early-leave">Potongan Pulang Awal per Menit (Rp)</Label>
+                <Input
+                  id="early-leave"
+                  type="number"
+                  min={0}
+                  value={earlyLeaveDeduction}
+                  onChange={(e) => setEarlyLeaveDeduction(Number(e.target.value))}
+                  className="border-2 border-foreground"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Isi 0 jika tidak ada potongan untuk pulang lebih awal
                 </p>
               </div>
             </CardContent>
@@ -611,49 +755,86 @@ const AdminSettings = () => {
               Manajemen Shift
             </CardTitle>
             <CardDescription>
-              Kelola shift kerja karyawan
+              Kelola shift kerja karyawan termasuk hari kerja dan durasi istirahat
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Add new shift */}
-            <div className="flex flex-col sm:flex-row gap-2 p-4 rounded-lg border-2 border-foreground bg-muted/30">
-              <Input
-                placeholder="Nama shift (contoh: Pagi)"
-                value={newShiftName}
-                onChange={(e) => setNewShiftName(e.target.value)}
-                className="border-2 border-foreground flex-1"
-              />
-              <div className="flex gap-2">
-                <div className="flex items-center gap-1">
-                  <Label className="text-xs whitespace-nowrap">Mulai:</Label>
-                  <Input
-                    type="time"
-                    value={newShiftStart}
-                    onChange={(e) => setNewShiftStart(e.target.value)}
-                    className="border-2 border-foreground w-28"
-                  />
-                </div>
-                <div className="flex items-center gap-1">
-                  <Label className="text-xs whitespace-nowrap">Selesai:</Label>
-                  <Input
-                    type="time"
-                    value={newShiftEnd}
-                    onChange={(e) => setNewShiftEnd(e.target.value)}
-                    className="border-2 border-foreground w-28"
-                  />
+            <div className="p-4 rounded-lg border-2 border-foreground bg-muted/30 space-y-3">
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                  placeholder="Nama shift (contoh: Pagi)"
+                  value={newShiftName}
+                  onChange={(e) => setNewShiftName(e.target.value)}
+                  className="border-2 border-foreground flex-1"
+                />
+                <div className="flex gap-2">
+                  <div className="flex items-center gap-1">
+                    <Label className="text-xs whitespace-nowrap">Mulai:</Label>
+                    <Input
+                      type="time"
+                      value={newShiftStart}
+                      onChange={(e) => setNewShiftStart(e.target.value)}
+                      className="border-2 border-foreground w-28"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Label className="text-xs whitespace-nowrap">Selesai:</Label>
+                    <Input
+                      type="time"
+                      value={newShiftEnd}
+                      onChange={(e) => setNewShiftEnd(e.target.value)}
+                      className="border-2 border-foreground w-28"
+                    />
+                  </div>
                 </div>
               </div>
+              
+              {/* Working days selection */}
+              <div className="space-y-2">
+                <Label className="text-xs">Hari Kerja:</Label>
+                <div className="flex flex-wrap gap-1">
+                  {DAYS_OF_WEEK.map((day) => (
+                    <Button
+                      key={day.value}
+                      type="button"
+                      size="sm"
+                      variant={newShiftWorkingDays.includes(day.value) ? 'default' : 'outline'}
+                      className="h-8 px-2 text-xs border-2 border-foreground"
+                      onClick={() => toggleWorkingDay(day.value, true)}
+                    >
+                      {day.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Break duration */}
+              <div className="flex items-center gap-2">
+                <Label className="text-xs whitespace-nowrap">Durasi Istirahat:</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={120}
+                  value={newShiftBreakDuration}
+                  onChange={(e) => setNewShiftBreakDuration(Number(e.target.value))}
+                  className="border-2 border-foreground w-20"
+                />
+                <span className="text-xs text-muted-foreground">menit</span>
+              </div>
+
               <Button 
                 onClick={() => addShiftMutation.mutate()}
-                disabled={addShiftMutation.isPending || !newShiftName.trim()}
+                disabled={addShiftMutation.isPending || !newShiftName.trim() || newShiftWorkingDays.length === 0}
+                className="w-full sm:w-auto"
               >
                 <Plus className="h-4 w-4 mr-1" />
-                Tambah
+                Tambah Shift
               </Button>
             </div>
 
             {/* Shift list */}
-            <div className="space-y-2">
+            <div className="space-y-3">
               {shiftsLoading ? (
                 <p className="text-muted-foreground text-center py-4">Memuat shift...</p>
               ) : shifts?.length === 0 ? (
@@ -662,59 +843,108 @@ const AdminSettings = () => {
                 shifts?.map((shift) => (
                   <div 
                     key={shift.id}
-                    className="flex items-center justify-between p-3 rounded-lg border-2 border-foreground"
+                    className="p-3 rounded-lg border-2 border-foreground"
                   >
                     {editingShift?.id === shift.id ? (
-                      <div className="flex flex-col sm:flex-row gap-2 flex-1 mr-2">
-                        <Input
-                          value={editShiftName}
-                          onChange={(e) => setEditShiftName(e.target.value)}
-                          className="border-2 border-foreground flex-1"
-                        />
-                        <div className="flex gap-2">
+                      <div className="space-y-3">
+                        <div className="flex flex-col sm:flex-row gap-2">
                           <Input
-                            type="time"
-                            value={editShiftStart}
-                            onChange={(e) => setEditShiftStart(e.target.value)}
-                            className="border-2 border-foreground w-28"
+                            value={editShiftName}
+                            onChange={(e) => setEditShiftName(e.target.value)}
+                            className="border-2 border-foreground flex-1"
                           />
-                          <Input
-                            type="time"
-                            value={editShiftEnd}
-                            onChange={(e) => setEditShiftEnd(e.target.value)}
-                            className="border-2 border-foreground w-28"
-                          />
+                          <div className="flex gap-2">
+                            <Input
+                              type="time"
+                              value={editShiftStart}
+                              onChange={(e) => setEditShiftStart(e.target.value)}
+                              className="border-2 border-foreground w-28"
+                            />
+                            <Input
+                              type="time"
+                              value={editShiftEnd}
+                              onChange={(e) => setEditShiftEnd(e.target.value)}
+                              className="border-2 border-foreground w-28"
+                            />
+                          </div>
                         </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="font-medium">{shift.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {shift.start_time.slice(0, 5)} - {shift.end_time.slice(0, 5)}
-                        </p>
-                      </div>
-                    )}
-                    <div className="flex gap-1">
-                      {editingShift?.id === shift.id ? (
-                        <>
+                        
+                        {/* Edit working days */}
+                        <div className="space-y-2">
+                          <Label className="text-xs">Hari Kerja:</Label>
+                          <div className="flex flex-wrap gap-1">
+                            {DAYS_OF_WEEK.map((day) => (
+                              <Button
+                                key={day.value}
+                                type="button"
+                                size="sm"
+                                variant={editShiftWorkingDays.includes(day.value) ? 'default' : 'outline'}
+                                className="h-8 px-2 text-xs border-2 border-foreground"
+                                onClick={() => toggleWorkingDay(day.value, false)}
+                              >
+                                {day.label}
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Edit break duration */}
+                        <div className="flex items-center gap-2">
+                          <Label className="text-xs whitespace-nowrap">Durasi Istirahat:</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={120}
+                            value={editShiftBreakDuration}
+                            onChange={(e) => setEditShiftBreakDuration(Number(e.target.value))}
+                            className="border-2 border-foreground w-20"
+                          />
+                          <span className="text-xs text-muted-foreground">menit</span>
+                        </div>
+
+                        <div className="flex gap-2">
                           <Button
-                            variant="ghost"
                             size="sm"
                             onClick={() => updateShiftMutation.mutate()}
                             disabled={updateShiftMutation.isPending}
                           >
-                            <Check className="h-4 w-4 text-green-600" />
+                            <Check className="h-4 w-4 mr-1" />
+                            Simpan
                           </Button>
                           <Button
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
                             onClick={handleCancelEditShift}
+                            className="border-2 border-foreground"
                           >
-                            <X className="h-4 w-4 text-destructive" />
+                            <X className="h-4 w-4 mr-1" />
+                            Batal
                           </Button>
-                        </>
-                      ) : (
-                        <>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-1">
+                          <p className="font-medium">{shift.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {shift.start_time.slice(0, 5)} - {shift.end_time.slice(0, 5)} • Istirahat {shift.break_duration_minutes || 60} menit
+                          </p>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {DAYS_OF_WEEK.map((day) => (
+                              <span
+                                key={day.value}
+                                className={`text-xs px-1.5 py-0.5 rounded ${
+                                  (shift.working_days || [1,2,3,4,5]).includes(day.value)
+                                    ? 'bg-primary text-primary-foreground'
+                                    : 'bg-muted text-muted-foreground'
+                                }`}
+                              >
+                                {day.label}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="flex gap-1">
                           <Button
                             variant="ghost"
                             size="sm"
@@ -730,9 +960,9 @@ const AdminSettings = () => {
                           >
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
-                        </>
-                      )}
-                    </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))
               )}
