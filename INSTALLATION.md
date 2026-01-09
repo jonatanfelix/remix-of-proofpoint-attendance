@@ -322,6 +322,203 @@ chmod +x deploy.sh
 
 ---
 
+---
+
+## 📊 Setup Data Awal Supabase
+
+Setelah database dan tabel terbuat, Anda perlu mengisi data awal berikut:
+
+### 1. Companies (Perusahaan) - WAJIB
+
+Minimal 1 company harus ada. Ini adalah data organisasi utama.
+
+```sql
+INSERT INTO companies (
+  id,
+  name,
+  office_latitude,
+  office_longitude,
+  radius_meters,
+  work_start_time,
+  grace_period_minutes,
+  annual_leave_quota
+) VALUES (
+  '6fbcdc6b-7558-45a8-8031-70a0eb46bda2',  -- ID tetap (atau generate baru)
+  'Nama Perusahaan Anda',
+  -6.200000,                                -- Latitude kantor (contoh: Jakarta)
+  106.816666,                               -- Longitude kantor
+  100,                                      -- Radius geofence (meter)
+  '08:00:00',                               -- Jam mulai kerja
+  15,                                       -- Grace period (menit)
+  12                                        -- Kuota cuti tahunan
+);
+```
+
+| Field | Deskripsi | Contoh |
+|-------|-----------|--------|
+| `name` | Nama perusahaan | "PT Contoh Indonesia" |
+| `office_latitude` | Latitude lokasi kantor | -6.200000 |
+| `office_longitude` | Longitude lokasi kantor | 106.816666 |
+| `radius_meters` | Radius geofence dalam meter | 100 |
+| `work_start_time` | Jam mulai kerja | '08:00:00' |
+| `grace_period_minutes` | Toleransi keterlambatan (menit) | 15 |
+| `annual_leave_quota` | Jatah cuti per tahun | 12 |
+
+> 💡 **Tip**: Dapatkan koordinat dari Google Maps dengan klik kanan → "What's here?"
+
+### 2. Shifts (Jadwal Kerja) - WAJIB
+
+Minimal 1 shift harus ada untuk assign ke karyawan.
+
+```sql
+INSERT INTO shifts (
+  name,
+  start_time,
+  end_time,
+  working_days,
+  break_duration_minutes,
+  is_active
+) VALUES 
+-- Shift Reguler (Senin-Jumat)
+(
+  'Regular',
+  '08:00:00',
+  '17:00:00',
+  ARRAY[1,2,3,4,5],   -- 1=Senin, 2=Selasa, ..., 5=Jumat
+  60,                  -- Istirahat 60 menit
+  true
+),
+-- Shift Pagi (Senin-Sabtu)
+(
+  'Shift Pagi',
+  '06:00:00',
+  '14:00:00',
+  ARRAY[1,2,3,4,5,6], -- Senin-Sabtu
+  60,
+  true
+),
+-- Shift Malam (Senin-Jumat)
+(
+  'Shift Malam',
+  '22:00:00',
+  '06:00:00',
+  ARRAY[1,2,3,4,5],
+  60,
+  true
+);
+```
+
+| Field | Deskripsi | Format |
+|-------|-----------|--------|
+| `name` | Nama shift | Text |
+| `start_time` | Jam mulai | 'HH:MM:SS' |
+| `end_time` | Jam selesai | 'HH:MM:SS' |
+| `working_days` | Hari kerja (array) | [1,2,3,4,5] = Sen-Jum |
+| `break_duration_minutes` | Durasi istirahat | Integer (menit) |
+| `is_active` | Status aktif | true/false |
+
+**Kode Hari:**
+- 0 = Minggu
+- 1 = Senin
+- 2 = Selasa
+- 3 = Rabu
+- 4 = Kamis
+- 5 = Jumat
+- 6 = Sabtu
+
+### 3. Holidays (Hari Libur) - OPSIONAL
+
+Tambahkan hari libur nasional atau perusahaan.
+
+```sql
+INSERT INTO holidays (name, date, end_date, description, is_active) VALUES
+('Tahun Baru', '2025-01-01', NULL, 'Tahun Baru Masehi', true),
+('Hari Raya Idul Fitri', '2025-03-30', '2025-03-31', 'Lebaran', true),
+('Hari Kemerdekaan', '2025-08-17', NULL, 'HUT RI ke-80', true),
+('Natal', '2025-12-25', NULL, 'Hari Natal', true);
+```
+
+| Field | Deskripsi | Format |
+|-------|-----------|--------|
+| `name` | Nama hari libur | Text |
+| `date` | Tanggal mulai | 'YYYY-MM-DD' |
+| `end_date` | Tanggal selesai (jika >1 hari) | 'YYYY-MM-DD' atau NULL |
+| `description` | Keterangan | Text |
+| `is_active` | Status aktif | true/false |
+
+### 4. Locations (Lokasi Kerja) - OPSIONAL
+
+Untuk karyawan lapangan yang bekerja di beberapa lokasi.
+
+```sql
+INSERT INTO locations (name, address, latitude, longitude, radius_meters, is_active) VALUES
+('Kantor Pusat', 'Jl. Sudirman No. 1, Jakarta', -6.200000, 106.816666, 100, true),
+('Cabang Bandung', 'Jl. Asia Afrika No. 5, Bandung', -6.921000, 107.607000, 100, true),
+('Gudang Cikarang', 'Jl. Industri Raya, Cikarang', -6.310000, 107.140000, 150, true);
+```
+
+### 5. User Pertama (Developer/Super Admin) - WAJIB
+
+**Langkah 1**: Buat user melalui Supabase Auth
+
+Di Supabase Dashboard → Authentication → Users → Add User:
+- Email: `admin@internal.local` (atau email valid)
+- Password: Password yang aman
+- ✅ Auto Confirm User
+
+**Langkah 2**: Update role menjadi Developer
+
+```sql
+-- Dapatkan user_id dari auth.users
+-- Kemudian update role di user_roles
+UPDATE user_roles 
+SET role = 'developer' 
+WHERE user_id = 'USER_ID_DARI_AUTH';
+
+-- Update profile dengan company_id
+UPDATE profiles 
+SET 
+  company_id = '6fbcdc6b-7558-45a8-8031-70a0eb46bda2',
+  username = 'superadmin',
+  role = 'developer'
+WHERE user_id = 'USER_ID_DARI_AUTH';
+```
+
+> ⚠️ **PENTING**: Setelah developer pertama dibuat, semua user baru HARUS dibuat melalui menu Admin → Karyawan di aplikasi.
+
+### 6. Ringkasan Data Minimum
+
+| Tabel | Minimum Record | Keterangan |
+|-------|----------------|------------|
+| `companies` | 1 | Wajib ada minimal 1 perusahaan |
+| `shifts` | 1 | Wajib ada minimal 1 shift |
+| `profiles` | 1 | Developer/Admin pertama |
+| `user_roles` | 1 | Role untuk user pertama |
+| `holidays` | 0 | Opsional |
+| `locations` | 0 | Opsional (untuk field workers) |
+
+### 7. Verifikasi Setup
+
+Jalankan query berikut untuk memastikan data sudah benar:
+
+```sql
+-- Cek companies
+SELECT id, name, office_latitude, office_longitude, radius_meters FROM companies;
+
+-- Cek shifts
+SELECT id, name, start_time, end_time, working_days FROM shifts WHERE is_active = true;
+
+-- Cek user pertama
+SELECT p.full_name, p.username, p.email, ur.role, p.company_id 
+FROM profiles p 
+JOIN user_roles ur ON p.user_id = ur.user_id;
+
+-- Cek storage buckets
+-- (Ini dicek di Supabase Dashboard → Storage)
+```
+
+---
+
 ## 🔧 Konfigurasi Supabase Production
 
 ### 1. Edge Functions
