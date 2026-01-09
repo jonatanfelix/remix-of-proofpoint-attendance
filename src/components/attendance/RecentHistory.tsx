@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 
 interface AttendanceRecord {
   id: string;
-  record_type: 'clock_in' | 'clock_out';
+  record_type: 'clock_in' | 'clock_out' | 'break_out' | 'break_in';
   recorded_at: string;
   photo_url?: string | null;
 }
@@ -76,7 +76,9 @@ const RecentHistory = ({ records, isLoading }: RecentHistoryProps) => {
                 )}
                 <div>
                   <p className="font-medium">
-                    {record.record_type === 'clock_in' ? 'Clock In' : 'Clock Out'}
+                    {record.record_type === 'clock_in' ? 'Clock In' : 
+                     record.record_type === 'clock_out' ? 'Clock Out' :
+                     record.record_type === 'break_out' ? 'Istirahat Keluar' : 'Kembali Istirahat'}
                   </p>
                   <p className="text-sm text-muted-foreground">
                     {format(new Date(record.recorded_at), 'MMM d, HH:mm')}

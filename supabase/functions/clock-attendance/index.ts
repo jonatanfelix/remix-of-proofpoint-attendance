@@ -21,8 +21,10 @@ function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
   return R * c
 }
 
+type RecordType = 'clock_in' | 'clock_out' | 'break_out' | 'break_in'
+
 interface ClockRequest {
-  record_type: 'clock_in' | 'clock_out'
+  record_type: RecordType
   latitude: number
   longitude: number
   accuracy_meters: number
@@ -74,7 +76,8 @@ Deno.serve(async (req) => {
     const { record_type, latitude, longitude, accuracy_meters, photo_url } = body
 
     // Validate required fields
-    if (!record_type || !['clock_in', 'clock_out'].includes(record_type)) {
+    const validTypes: RecordType[] = ['clock_in', 'clock_out', 'break_out', 'break_in']
+    if (!record_type || !validTypes.includes(record_type as RecordType)) {
       return new Response(
         JSON.stringify({ error: 'Invalid record_type', code: 'INVALID_TYPE' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -196,7 +199,7 @@ Deno.serve(async (req) => {
       
       if (record_type === 'clock_in') {
         // Can only clock in if not already clocked in, or if last record is clock_out
-        if (lastRecord?.record_type === 'clock_in') {
+        if (lastRecord?.record_type === 'clock_in' || lastRecord?.record_type === 'break_out') {
           return new Response(
             JSON.stringify({ 
               error: 'Anda sudah clock in hari ini. Clock out dulu sebelum clock in lagi.',
@@ -205,13 +208,35 @@ Deno.serve(async (req) => {
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
         }
-      } else {
-        // Can only clock out if last record is clock_in
-        if (!lastRecord || lastRecord.record_type !== 'clock_in') {
+      } else if (record_type === 'clock_out') {
+        // Can only clock out if last record is clock_in or break_in
+        if (!lastRecord || (lastRecord.record_type !== 'clock_in' && lastRecord.record_type !== 'break_in')) {
           return new Response(
             JSON.stringify({ 
               error: 'Tidak dapat clock out karena belum clock in.',
               code: 'NOT_CLOCKED_IN'
+            }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+      } else if (record_type === 'break_out') {
+        // Can only break out if last record is clock_in or break_in
+        if (!lastRecord || (lastRecord.record_type !== 'clock_in' && lastRecord.record_type !== 'break_in')) {
+          return new Response(
+            JSON.stringify({ 
+              error: 'Tidak dapat istirahat karena belum clock in.',
+              code: 'NOT_CLOCKED_IN'
+            }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+      } else if (record_type === 'break_in') {
+        // Can only break in if last record is break_out
+        if (!lastRecord || lastRecord.record_type !== 'break_out') {
+          return new Response(
+            JSON.stringify({ 
+              error: 'Tidak dapat kembali dari istirahat karena belum istirahat keluar.',
+              code: 'NOT_ON_BREAK'
             }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
@@ -275,11 +300,18 @@ Deno.serve(async (req) => {
       p_user_agent: req.headers.get('user-agent')
     })
 
+    const messages: Record<RecordType, string> = {
+      clock_in: 'Berhasil Clock In!',
+      clock_out: 'Berhasil Clock Out!',
+      break_out: 'Berhasil Istirahat Keluar!',
+      break_in: 'Berhasil Kembali dari Istirahat!',
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
         record: newRecord,
-        message: record_type === 'clock_in' ? 'Berhasil Clock In!' : 'Berhasil Clock Out!'
+        message: messages[record_type as RecordType]
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )

@@ -16,9 +16,11 @@ import { MapPin, RefreshCw, ExternalLink, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
+import { type RecordType, type AttendanceStatus } from '@/components/attendance/AttendanceButtons';
+
 interface AttendanceRecord {
   id: string;
-  record_type: 'clock_in' | 'clock_out';
+  record_type: RecordType;
   recorded_at: string;
   photo_url: string | null;
 }
@@ -84,7 +86,7 @@ const Dashboard = () => {
 
   // Camera state
   const [showCamera, setShowCamera] = useState(false);
-  const [pendingRecordType, setPendingRecordType] = useState<'clock_in' | 'clock_out' | null>(null);
+  const [pendingRecordType, setPendingRecordType] = useState<RecordType | null>(null);
 
   // Fetch user profile with geofence settings and shift info
   const { data: profile, isLoading: profileLoading } = useQuery({
@@ -153,8 +155,7 @@ const Dashboard = () => {
     return today.getTime();
   }, []);
 
-  // Get current attendance status
-  const status = useMemo(() => {
+  const status = useMemo((): AttendanceStatus => {
     if (!recentRecords || recentRecords.length === 0) return 'not_present';
 
     const todayRecords = recentRecords.filter((r) => {
@@ -166,7 +167,10 @@ const Dashboard = () => {
     if (todayRecords.length === 0) return 'not_present';
 
     const lastRecord = todayRecords[0];
-    return lastRecord.record_type === 'clock_in' ? 'clocked_in' : 'clocked_out';
+    if (lastRecord.record_type === 'clock_out') return 'clocked_out';
+    if (lastRecord.record_type === 'break_out') return 'on_break';
+    if (lastRecord.record_type === 'clock_in' || lastRecord.record_type === 'break_in') return 'clocked_in';
+    return 'not_present';
   }, [recentRecords, todayDateString]);
 
   // Get today's clock in record specifically
@@ -261,10 +265,8 @@ const Dashboard = () => {
     refreshLocation();
   }, [refreshLocation]);
 
-  // Upload photo to storage
-  const uploadPhoto = async (imageDataUrl: string, recordType: 'clock_in' | 'clock_out'): Promise<string | null> => {
+  const uploadPhoto = async (imageDataUrl: string, recordType: RecordType): Promise<string | null> => {
     try {
-      // Convert base64 to blob
       const base64Data = imageDataUrl.split(',')[1];
       const byteCharacters = atob(base64Data);
       const byteNumbers = new Array(byteCharacters.length);
@@ -273,21 +275,14 @@ const Dashboard = () => {
       }
       const byteArray = new Uint8Array(byteNumbers);
       const blob = new Blob([byteArray], { type: 'image/jpeg' });
-
-      // Generate unique filename
       const fileName = `${user?.id}/${Date.now()}_${recordType}.jpg`;
-
       const { error } = await supabase.storage
         .from('attendance-photos')
         .upload(fileName, blob, { contentType: 'image/jpeg' });
-
       if (error) throw error;
-
-      // Get public URL
       const { data: urlData } = supabase.storage
         .from('attendance-photos')
         .getPublicUrl(fileName);
-
       return urlData.publicUrl;
     } catch (err) {
       console.error('Photo upload error:', err);
@@ -295,18 +290,14 @@ const Dashboard = () => {
     }
   };
 
-  // Clock in/out mutation - now uses backend edge function for security
   const attendanceMutation = useMutation({
-    mutationFn: async ({ recordType, photoUrl }: { recordType: 'clock_in' | 'clock_out'; photoUrl: string | null }) => {
+    mutationFn: async ({ recordType, photoUrl }: { recordType: RecordType; photoUrl: string | null }) => {
       if (!user?.id || !currentPosition) {
         throw new Error('Lokasi belum tersedia. Silakan refresh lokasi.');
       }
-
       if (!photoUrl) {
         throw new Error('Foto wajib diambil untuk absensi.');
       }
-
-      // Call backend edge function for secure validation
       const { data, error } = await supabase.functions.invoke('clock-attendance', {
         body: {
           record_type: recordType,
@@ -316,20 +307,14 @@ const Dashboard = () => {
           photo_url: photoUrl,
         },
       });
-
       if (error) throw error;
-      
-      // Check for business logic errors from edge function
-      if (data?.error) {
-        throw new Error(data.error);
-      }
-
+      if (data?.error) throw new Error(data.error);
       return data;
     },
-    onSuccess: (data, { recordType }) => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['attendance-records'] });
       toast({
-        title: recordType === 'clock_in' ? 'Berhasil Clock In!' : 'Berhasil Clock Out!',
+        title: data?.message || 'Berhasil!',
         description: `Tercatat pada ${new Date().toLocaleTimeString()}`,
       });
     },
@@ -342,7 +327,7 @@ const Dashboard = () => {
     },
   });
 
-  const handleClockIn = () => {
+  const handleAction = (recordType: RecordType) => {
     if (!currentPosition) {
       toast({
         title: 'Lokasi Diperlukan',
@@ -351,8 +336,6 @@ const Dashboard = () => {
       });
       return;
     }
-
-    // Check geofence if required
     if (profile?.requires_geofence && company?.office_latitude && company?.office_longitude) {
       const distance = calculateDistance(
         currentPosition.latitude,
@@ -360,7 +343,6 @@ const Dashboard = () => {
         company.office_latitude,
         company.office_longitude
       );
-
       if (distance > company.radius_meters) {
         toast({
           title: 'Di Luar Jangkauan',
@@ -370,41 +352,7 @@ const Dashboard = () => {
         return;
       }
     }
-
-    setPendingRecordType('clock_in');
-    setShowCamera(true);
-  };
-
-  const handleClockOut = () => {
-    if (!currentPosition) {
-      toast({
-        title: 'Lokasi Diperlukan',
-        description: 'Silakan tunggu atau refresh lokasi terlebih dahulu.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    // Check geofence if required (same logic for clock out)
-    if (profile?.requires_geofence && company?.office_latitude && company?.office_longitude) {
-      const distance = calculateDistance(
-        currentPosition.latitude,
-        currentPosition.longitude,
-        company.office_latitude,
-        company.office_longitude
-      );
-
-      if (distance > company.radius_meters) {
-        toast({
-          title: 'Di Luar Jangkauan',
-          description: `Anda berada ${Math.round(distance)}m dari kantor. Maksimal ${company.radius_meters}m untuk absen.`,
-          variant: 'destructive',
-        });
-        return;
-      }
-    }
-
-    setPendingRecordType('clock_out');
+    setPendingRecordType(recordType);
     setShowCamera(true);
   };
 
@@ -455,9 +403,7 @@ const Dashboard = () => {
     if (!company?.office_latitude || !company?.office_longitude) return true; // No office location set
     return isWithinGeofence;
   };
-
-  const canClockIn = currentPosition !== null && status !== 'clocked_in' && geofenceCheck();
-  const canClockOut = currentPosition !== null && status === 'clocked_in' && geofenceCheck();
+  const canPerformAction = currentPosition !== null && geofenceCheck();
 
   // Show loading state while profile is being fetched
   if (profileLoading) {
