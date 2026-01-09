@@ -36,7 +36,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { 
   Users, Search, MapPin, MapPinOff, Edit, UserPlus, Shield, ShieldCheck, 
   Code, Briefcase, HardHat, Clock, Filter, CheckCircle2, XCircle, Building2,
-  Download, Upload
+  Download, Upload, AlertTriangle
 } from 'lucide-react';
 import { ImportEmployees } from '@/components/employees/ImportEmployees';
 import { toast } from 'sonner';
@@ -352,6 +352,27 @@ const AdminEmployees = () => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
+  // Check if employee has inconsistent configuration
+  const hasInconsistentConfig = (employee: Profile) => {
+    // office employee should have geofence, field employee should not
+    if (employee.employee_type === 'office' && !employee.requires_geofence) return true;
+    if (employee.employee_type === 'field' && employee.requires_geofence) return true;
+    return false;
+  };
+
+  const getInconsistentMessage = (employee: Profile) => {
+    if (employee.employee_type === 'office' && !employee.requires_geofence) {
+      return 'Karyawan Kantoran tidak wajib geofence';
+    }
+    if (employee.employee_type === 'field' && employee.requires_geofence) {
+      return 'Karyawan Lapangan wajib geofence';
+    }
+    return '';
+  };
+
+  // Count employees with inconsistent config
+  const inconsistentCount = employees?.filter(hasInconsistentConfig).length || 0;
+
   // Loading state
   if (roleLoading || employeesLoading) {
     return (
@@ -485,6 +506,22 @@ const AdminEmployees = () => {
               </div>
             </CardContent>
           </Card>
+
+          {inconsistentCount > 0 && (
+            <Card className="border-2 border-amber-500 bg-amber-50 dark:bg-amber-950/20">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-amber-600">Perlu Review</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-amber-500" />
+                  <span className="text-2xl font-bold text-amber-600">
+                    {inconsistentCount}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Search & Filters */}
@@ -615,17 +652,24 @@ const AdminEmployees = () => {
                           )}
                         </TableCell>
                         <TableCell>
-                          {employee.employee_type === 'field' ? (
-                            <Badge variant="outline" className="border-orange-500 text-orange-600">
-                              <HardHat className="h-3 w-3 mr-1" />
-                              Lapangan
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="border-blue-500 text-blue-600">
-                              <Briefcase className="h-3 w-3 mr-1" />
-                              Kantoran
-                            </Badge>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {employee.employee_type === 'field' ? (
+                              <Badge variant="outline" className="border-orange-500 text-orange-600">
+                                <HardHat className="h-3 w-3 mr-1" />
+                                Lapangan
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="border-blue-500 text-blue-600">
+                                <Briefcase className="h-3 w-3 mr-1" />
+                                Kantoran
+                              </Badge>
+                            )}
+                            {hasInconsistentConfig(employee) && (
+                              <span title={getInconsistentMessage(employee)}>
+                                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                              </span>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           {employee.is_active ? (
@@ -759,6 +803,24 @@ const AdminEmployees = () => {
                 onCheckedChange={setEditRequiresGeofence}
               />
             </div>
+
+            {/* Warning for inconsistent configuration */}
+            {((editEmployeeType === 'office' && !editRequiresGeofence) || 
+              (editEmployeeType === 'field' && editRequiresGeofence)) && (
+              <div className="flex items-start gap-3 rounded-lg border-2 border-amber-500 bg-amber-50 dark:bg-amber-950/20 p-4">
+                <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
+                    Konfigurasi Tidak Konsisten
+                  </p>
+                  <p className="text-sm text-amber-600 dark:text-amber-500">
+                    {editEmployeeType === 'office' && !editRequiresGeofence 
+                      ? 'Karyawan Kantoran biasanya wajib absen di kantor (geofence aktif).'
+                      : 'Karyawan Lapangan biasanya tidak wajib absen di kantor (geofence non-aktif).'}
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center justify-between rounded-lg border-2 border-foreground p-4">
               <div className="space-y-1">
