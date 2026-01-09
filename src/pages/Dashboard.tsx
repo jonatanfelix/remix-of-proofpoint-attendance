@@ -628,11 +628,10 @@ const Dashboard = () => {
 
           {/* Attendance Buttons */}
           <AttendanceButtons
-            canClockIn={canClockIn}
-            canClockOut={canClockOut}
+            status={status}
             isSubmitting={attendanceMutation.isPending}
-            onClockIn={handleClockIn}
-            onClockOut={handleClockOut}
+            canPerformAction={canPerformAction}
+            onAction={handleAction}
           />
 
           {/* Recent History */}
@@ -646,7 +645,12 @@ const Dashboard = () => {
             onClose={handleCameraClose}
             onCapture={handleCameraCapture}
             employeeName={profile?.full_name || user?.email || 'Employee'}
-            recordType={pendingRecordType === 'clock_in' ? 'CLOCK IN' : 'CLOCK OUT'}
+            recordType={
+              pendingRecordType === 'clock_in' ? 'CLOCK IN' :
+              pendingRecordType === 'clock_out' ? 'CLOCK OUT' :
+              pendingRecordType === 'break_out' ? 'ISTIRAHAT KELUAR' :
+              pendingRecordType === 'break_in' ? 'KEMBALI ISTIRAHAT' : 'ABSENSI'
+            }
             latitude={currentPosition.latitude}
             longitude={currentPosition.longitude}
             isLate={pendingRecordType === 'clock_in' ? currentTimeLateness.isLate : false}
