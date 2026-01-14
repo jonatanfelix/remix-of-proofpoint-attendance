@@ -55,23 +55,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const signIn = async (username: string, password: string) => {
-    // Look up email from username in profiles table
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('email')
-      .eq('username', username.toLowerCase().trim())
-      .maybeSingle();
+    // Use RPC function to lookup email - bypasses RLS for anonymous users
+    const { data: email, error: rpcError } = await supabase
+      .rpc('get_email_by_username', { p_username: username });
 
-    if (profileError) {
+    if (rpcError) {
+      console.error('Login lookup error:', rpcError);
       return { error: new Error('Terjadi kesalahan. Coba lagi nanti.') };
     }
 
-    if (!profile) {
+    if (!email) {
       return { error: new Error('Username tidak ditemukan') };
     }
 
     const { error } = await supabase.auth.signInWithPassword({
-      email: profile.email,
+      email,
       password,
     });
     return { error };

@@ -855,6 +855,29 @@ AS $$
 $$;
 
 -- ============================================================
+-- FUNCTION: get_email_by_username
+-- Lookup email dari username untuk proses login (bypass RLS)
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.get_email_by_username(p_username text)
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_email text;
+BEGIN
+  SELECT email INTO v_email
+  FROM public.profiles
+  WHERE LOWER(username) = LOWER(TRIM(p_username))
+  AND is_active = true
+  LIMIT 1;
+  
+  RETURN v_email;
+END;
+$$;
+
+-- ============================================================
 -- FUNCTION: handle_new_user
 -- Auto-create profile & role saat user baru register
 -- ============================================================
