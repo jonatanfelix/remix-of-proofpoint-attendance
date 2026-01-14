@@ -230,8 +230,13 @@ const Dashboard = () => {
   const gracePeriodMinutes = company?.grace_period_minutes || 0;
   
   const calculateLateness = useCallback((checkCurrentTime: boolean = false) => {
+    // If profile not loaded yet, don't calculate lateness
+    if (!profile) {
+      return { isLate: false, lateMinutes: 0 };
+    }
+    
     // Field employees don't have lateness - they work based on duration
-    if (profile?.employee_type === 'field') {
+    if (profile.employee_type === 'field') {
       return { isLate: false, lateMinutes: 0 };
     }
 
@@ -265,7 +270,7 @@ const Dashboard = () => {
       isLate: diffMinutes > 0,
       lateMinutes: diffMinutes > 0 ? diffMinutes : 0,
     };
-  }, [todayClockIn, effectiveWorkStartTime, profile?.employee_type, gracePeriodMinutes]);
+  }, [todayClockIn, effectiveWorkStartTime, profile, gracePeriodMinutes]);
 
   // For status card - show lateness from existing record
   const { isLate, lateMinutes } = calculateLateness(false);
