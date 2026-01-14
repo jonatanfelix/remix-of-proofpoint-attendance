@@ -568,6 +568,881 @@ JOIN user_roles ur ON p.user_id = ur.user_id;
 
 ---
 
+## 🗄️ Setup Lengkap SQL Supabase
+
+Bagian ini berisi **SEMUA SQL** yang diperlukan untuk setup database GeoAttend dari nol. Jalankan di Supabase Dashboard → SQL Editor secara berurutan.
+
+### 📋 Daftar Isi SQL Setup
+
+1. [Enums & Types](#1-enums--types)
+2. [Tabel Utama](#2-tabel-utama)
+3. [Database Functions](#3-database-functions)
+4. [Triggers](#4-triggers)
+5. [Row Level Security (RLS)](#5-row-level-security-rls)
+6. [Storage Buckets & Policies](#6-storage-buckets--policies)
+7. [Data Awal (Seed)](#7-data-awal-seed)
+
+---
+
+### 1. Enums & Types
+
+Jalankan ini **PERTAMA** sebelum membuat tabel:
+
+```sql
+-- ============================================================
+-- ENUM DEFINITIONS
+-- ============================================================
+
+-- Role aplikasi
+CREATE TYPE public.app_role AS ENUM ('admin', 'employee', 'developer');
+
+-- Tipe karyawan
+CREATE TYPE public.employee_type AS ENUM ('office', 'field');
+```
+
+---
+
+### 2. Tabel Utama
+
+Jalankan setelah enums dibuat:
+
+```sql
+-- ============================================================
+-- TABLE: companies
+-- Konfigurasi perusahaan
+-- ============================================================
+CREATE TABLE public.companies (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  office_latitude NUMERIC,
+  office_longitude NUMERIC,
+  radius_meters INTEGER NOT NULL DEFAULT 100,
+  work_start_time TIME NOT NULL DEFAULT '08:00:00',
+  grace_period_minutes INTEGER NOT NULL DEFAULT 0,
+  annual_leave_quota INTEGER NOT NULL DEFAULT 12,
+  overtime_start_after_minutes INTEGER NOT NULL DEFAULT 0,
+  overtime_rate_per_hour INTEGER NOT NULL DEFAULT 0,
+  early_leave_deduction_per_minute INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- TABLE: shifts
+-- Jadwal kerja
+-- ============================================================
+CREATE TABLE public.shifts (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  start_time TIME NOT NULL,
+  end_time TIME NOT NULL,
+  working_days INTEGER[] NOT NULL DEFAULT ARRAY[1,2,3,4,5],
+  break_duration_minutes INTEGER NOT NULL DEFAULT 60,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- TABLE: profiles
+-- Data profil karyawan
+-- ============================================================
+CREATE TABLE public.profiles (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID NOT NULL UNIQUE,
+  email TEXT NOT NULL,
+  full_name TEXT NOT NULL,
+  username TEXT,
+  avatar_url TEXT,
+  company_id UUID REFERENCES public.companies(id),
+  shift_id UUID REFERENCES public.shifts(id),
+  job_title TEXT,
+  department TEXT,
+  role public.app_role NOT NULL DEFAULT 'employee',
+  employee_type public.employee_type NOT NULL DEFAULT 'office',
+  requires_geofence BOOLEAN NOT NULL DEFAULT true,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  leave_balance INTEGER NOT NULL DEFAULT 12,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- TABLE: user_roles
+-- Role terpisah untuk keamanan (mencegah privilege escalation)
+-- ============================================================
+CREATE TABLE public.user_roles (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID NOT NULL UNIQUE,
+  role public.app_role NOT NULL DEFAULT 'employee',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- TABLE: locations
+-- Lokasi kerja untuk field workers
+-- ============================================================
+CREATE TABLE public.locations (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  address TEXT,
+  latitude NUMERIC NOT NULL,
+  longitude NUMERIC NOT NULL,
+  radius_meters INTEGER NOT NULL DEFAULT 100,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- TABLE: attendance_records
+-- Catatan absensi
+-- ============================================================
+CREATE TABLE public.attendance_records (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID NOT NULL,
+  location_id UUID REFERENCES public.locations(id),
+  record_type TEXT NOT NULL, -- 'clock_in' atau 'clock_out'
+  latitude NUMERIC NOT NULL,
+  longitude NUMERIC NOT NULL,
+  accuracy_meters NUMERIC,
+  photo_url TEXT,
+  notes TEXT,
+  recorded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- TABLE: leave_requests
+-- Pengajuan cuti/izin
+-- ============================================================
+CREATE TABLE public.leave_requests (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID NOT NULL,
+  leave_type TEXT NOT NULL, -- 'annual', 'sick', 'permission'
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  reason TEXT,
+  proof_url TEXT,
+  status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
+  reviewed_by UUID,
+  reviewed_at TIMESTAMPTZ,
+  review_notes TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- TABLE: holidays
+-- Hari libur
+-- ============================================================
+CREATE TABLE public.holidays (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  date DATE NOT NULL,
+  end_date DATE,
+  description TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- TABLE: audit_logs
+-- Log aktivitas sistem
+-- ============================================================
+CREATE TABLE public.audit_logs (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID NOT NULL,
+  user_email TEXT,
+  user_role TEXT,
+  company_id UUID,
+  action TEXT NOT NULL,
+  resource_type TEXT NOT NULL,
+  resource_id TEXT,
+  details JSONB,
+  ip_address TEXT,
+  user_agent TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+---
+
+### 3. Database Functions
+
+Functions untuk keamanan dan helper:
+
+```sql
+-- ============================================================
+-- FUNCTION: get_user_company_id
+-- Mengambil company_id user (security definer untuk bypass RLS)
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.get_user_company_id(_user_id UUID)
+RETURNS UUID
+LANGUAGE sql
+STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT company_id FROM public.profiles WHERE user_id = _user_id LIMIT 1
+$$;
+
+-- ============================================================
+-- FUNCTION: get_user_role
+-- Mengambil role user
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.get_user_role(_user_id UUID)
+RETURNS public.app_role
+LANGUAGE sql
+STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT role FROM public.user_roles WHERE user_id = _user_id LIMIT 1
+$$;
+
+-- ============================================================
+-- FUNCTION: has_role
+-- Cek apakah user memiliki role tertentu
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.has_role(_user_id UUID, _role public.app_role)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.user_roles
+    WHERE user_id = _user_id
+      AND role = _role
+  )
+$$;
+
+-- ============================================================
+-- FUNCTION: is_admin_or_developer
+-- Cek apakah user adalah admin atau developer
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.is_admin_or_developer(_user_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.user_roles
+    WHERE user_id = _user_id
+      AND role IN ('admin', 'developer')
+  )
+$$;
+
+-- ============================================================
+-- FUNCTION: is_developer
+-- Cek apakah user adalah developer
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.is_developer(_user_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.user_roles
+    WHERE user_id = _user_id
+      AND role = 'developer'
+  )
+$$;
+
+-- ============================================================
+-- FUNCTION: handle_new_user
+-- Auto-create profile & role saat user baru register
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  -- Insert into profiles
+  INSERT INTO public.profiles (user_id, full_name, email)
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.raw_user_meta_data ->> 'full_name', NEW.email),
+    NEW.email
+  );
+  
+  -- Insert default role
+  INSERT INTO public.user_roles (user_id, role)
+  VALUES (NEW.id, 'employee');
+  
+  RETURN NEW;
+END;
+$$;
+
+-- ============================================================
+-- FUNCTION: update_updated_at_column
+-- Auto-update timestamp updated_at
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+-- ============================================================
+-- FUNCTION: log_audit_event
+-- Helper untuk insert audit log
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.log_audit_event(
+  p_user_id UUID,
+  p_user_email TEXT,
+  p_user_role TEXT,
+  p_company_id UUID,
+  p_action TEXT,
+  p_resource_type TEXT,
+  p_resource_id TEXT DEFAULT NULL,
+  p_details JSONB DEFAULT NULL,
+  p_ip_address TEXT DEFAULT NULL,
+  p_user_agent TEXT DEFAULT NULL
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_log_id UUID;
+BEGIN
+  INSERT INTO public.audit_logs (
+    user_id, user_email, user_role, company_id,
+    action, resource_type, resource_id, details,
+    ip_address, user_agent
+  ) VALUES (
+    p_user_id, p_user_email, p_user_role, p_company_id,
+    p_action, p_resource_type, p_resource_id, p_details,
+    p_ip_address, p_user_agent
+  ) RETURNING id INTO v_log_id;
+  
+  RETURN v_log_id;
+END;
+$$;
+```
+
+---
+
+### 4. Triggers
+
+Triggers untuk automasi:
+
+```sql
+-- ============================================================
+-- TRIGGER: Auto-create profile saat user baru di auth.users
+-- ============================================================
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- ============================================================
+-- TRIGGER: Auto-update updated_at pada profiles
+-- ============================================================
+CREATE TRIGGER update_profiles_updated_at
+  BEFORE UPDATE ON public.profiles
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+-- ============================================================
+-- TRIGGER: Auto-update updated_at pada companies
+-- ============================================================
+CREATE TRIGGER update_companies_updated_at
+  BEFORE UPDATE ON public.companies
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+-- ============================================================
+-- TRIGGER: Auto-update updated_at pada shifts
+-- ============================================================
+CREATE TRIGGER update_shifts_updated_at
+  BEFORE UPDATE ON public.shifts
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+-- ============================================================
+-- TRIGGER: Auto-update updated_at pada locations
+-- ============================================================
+CREATE TRIGGER update_locations_updated_at
+  BEFORE UPDATE ON public.locations
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+-- ============================================================
+-- TRIGGER: Auto-update updated_at pada leave_requests
+-- ============================================================
+CREATE TRIGGER update_leave_requests_updated_at
+  BEFORE UPDATE ON public.leave_requests
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+-- ============================================================
+-- TRIGGER: Auto-update updated_at pada holidays
+-- ============================================================
+CREATE TRIGGER update_holidays_updated_at
+  BEFORE UPDATE ON public.holidays
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+```
+
+---
+
+### 5. Row Level Security (RLS)
+
+**PENTING**: RLS memastikan data aman dan user hanya bisa akses data yang diizinkan.
+
+```sql
+-- ============================================================
+-- ENABLE RLS PADA SEMUA TABEL
+-- ============================================================
+ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.shifts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.locations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.attendance_records ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.leave_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.holidays ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+
+-- ============================================================
+-- RLS: companies
+-- ============================================================
+CREATE POLICY "Users can view their company"
+  ON public.companies FOR SELECT
+  USING (id = get_user_company_id(auth.uid()));
+
+CREATE POLICY "Admins can manage their company"
+  ON public.companies FOR ALL
+  USING (has_role(auth.uid(), 'admin') AND id = get_user_company_id(auth.uid()));
+
+CREATE POLICY "Developers can manage all companies"
+  ON public.companies FOR ALL
+  USING (has_role(auth.uid(), 'developer'));
+
+-- ============================================================
+-- RLS: shifts
+-- ============================================================
+CREATE POLICY "Authenticated users can view active shifts"
+  ON public.shifts FOR SELECT
+  USING (is_active = true);
+
+CREATE POLICY "Admins can manage shifts"
+  ON public.shifts FOR ALL
+  USING (has_role(auth.uid(), 'admin'));
+
+CREATE POLICY "Developers can manage all shifts"
+  ON public.shifts FOR ALL
+  USING (has_role(auth.uid(), 'developer'));
+
+-- ============================================================
+-- RLS: profiles
+-- ============================================================
+CREATE POLICY "Users can view their own profile"
+  ON public.profiles FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own profile"
+  ON public.profiles FOR UPDATE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own profile"
+  ON public.profiles FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Admins can view company profiles"
+  ON public.profiles FOR SELECT
+  USING (has_role(auth.uid(), 'admin') AND company_id = get_user_company_id(auth.uid()));
+
+CREATE POLICY "Admins can update company profiles"
+  ON public.profiles FOR UPDATE
+  USING (has_role(auth.uid(), 'admin') AND company_id = get_user_company_id(auth.uid()));
+
+CREATE POLICY "Developers can view all profiles"
+  ON public.profiles FOR SELECT
+  USING (has_role(auth.uid(), 'developer'));
+
+CREATE POLICY "Developers can manage all profiles"
+  ON public.profiles FOR ALL
+  USING (has_role(auth.uid(), 'developer'));
+
+-- ============================================================
+-- RLS: user_roles
+-- ============================================================
+CREATE POLICY "Users can view their own roles"
+  ON public.user_roles FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Admins can manage all roles"
+  ON public.user_roles FOR ALL
+  USING (has_role(auth.uid(), 'admin'));
+
+-- ============================================================
+-- RLS: locations
+-- ============================================================
+CREATE POLICY "Authenticated users can view active locations"
+  ON public.locations FOR SELECT
+  USING (is_active = true);
+
+CREATE POLICY "Admins can manage locations"
+  ON public.locations FOR ALL
+  USING (has_role(auth.uid(), 'admin'));
+
+-- ============================================================
+-- RLS: attendance_records
+-- ============================================================
+CREATE POLICY "Users can view their own attendance"
+  ON public.attendance_records FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own attendance"
+  ON public.attendance_records FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Admins can view company attendance"
+  ON public.attendance_records FOR SELECT
+  USING (
+    has_role(auth.uid(), 'admin') AND 
+    EXISTS (
+      SELECT 1 FROM profiles p 
+      WHERE p.user_id = attendance_records.user_id 
+      AND p.company_id = get_user_company_id(auth.uid())
+    )
+  );
+
+CREATE POLICY "Developers can view all attendance"
+  ON public.attendance_records FOR SELECT
+  USING (has_role(auth.uid(), 'developer'));
+
+-- ============================================================
+-- RLS: leave_requests
+-- ============================================================
+CREATE POLICY "Users can view their own leave requests"
+  ON public.leave_requests FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own leave requests"
+  ON public.leave_requests FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Admins can view all leave requests in company"
+  ON public.leave_requests FOR SELECT
+  USING (
+    has_role(auth.uid(), 'admin') AND 
+    EXISTS (
+      SELECT 1 FROM profiles p 
+      WHERE p.user_id = leave_requests.user_id 
+      AND p.company_id = get_user_company_id(auth.uid())
+    )
+  );
+
+CREATE POLICY "Admins can update leave requests in company"
+  ON public.leave_requests FOR UPDATE
+  USING (
+    has_role(auth.uid(), 'admin') AND 
+    EXISTS (
+      SELECT 1 FROM profiles p 
+      WHERE p.user_id = leave_requests.user_id 
+      AND p.company_id = get_user_company_id(auth.uid())
+    )
+  );
+
+CREATE POLICY "Developers can view all leave requests"
+  ON public.leave_requests FOR SELECT
+  USING (has_role(auth.uid(), 'developer'));
+
+CREATE POLICY "Developers can update all leave requests"
+  ON public.leave_requests FOR UPDATE
+  USING (has_role(auth.uid(), 'developer'));
+
+-- ============================================================
+-- RLS: holidays
+-- ============================================================
+CREATE POLICY "Authenticated users can view active holidays"
+  ON public.holidays FOR SELECT
+  USING (is_active = true);
+
+CREATE POLICY "Admins can manage holidays"
+  ON public.holidays FOR ALL
+  USING (has_role(auth.uid(), 'admin'));
+
+CREATE POLICY "Developers can manage all holidays"
+  ON public.holidays FOR ALL
+  USING (has_role(auth.uid(), 'developer'));
+
+-- ============================================================
+-- RLS: audit_logs
+-- ============================================================
+CREATE POLICY "Authenticated users can insert audit logs"
+  ON public.audit_logs FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Admins can view company audit logs"
+  ON public.audit_logs FOR SELECT
+  USING (has_role(auth.uid(), 'admin') AND company_id = get_user_company_id(auth.uid()));
+
+CREATE POLICY "Developers can view all audit logs"
+  ON public.audit_logs FOR SELECT
+  USING (has_role(auth.uid(), 'developer'));
+```
+
+---
+
+### 6. Storage Buckets & Policies
+
+Setup storage untuk foto:
+
+```sql
+-- ============================================================
+-- STORAGE BUCKETS
+-- Jalankan di SQL Editor (bukan di Dashboard)
+-- ============================================================
+
+-- Bucket untuk foto absensi
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'attendance-photos', 
+  'attendance-photos', 
+  true,
+  5242880, -- 5MB
+  ARRAY['image/jpeg', 'image/png', 'image/webp']
+) ON CONFLICT (id) DO NOTHING;
+
+-- Bucket untuk foto profil
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'avatars', 
+  'avatars', 
+  true,
+  2097152, -- 2MB
+  ARRAY['image/jpeg', 'image/png', 'image/webp']
+) ON CONFLICT (id) DO NOTHING;
+
+-- Bucket untuk bukti cuti
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'leave-proofs', 
+  'leave-proofs', 
+  true,
+  10485760, -- 10MB
+  ARRAY['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+) ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================
+-- STORAGE POLICIES
+-- ============================================================
+
+-- Policy: Semua bisa lihat file di attendance-photos
+CREATE POLICY "Public can view attendance photos"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'attendance-photos');
+
+-- Policy: Authenticated user bisa upload ke attendance-photos
+CREATE POLICY "Authenticated users can upload attendance photos"
+  ON storage.objects FOR INSERT
+  WITH CHECK (
+    bucket_id = 'attendance-photos' AND
+    auth.role() = 'authenticated'
+  );
+
+-- Policy: Semua bisa lihat avatar
+CREATE POLICY "Public can view avatars"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'avatars');
+
+-- Policy: User bisa upload avatar sendiri
+CREATE POLICY "Users can upload own avatar"
+  ON storage.objects FOR INSERT
+  WITH CHECK (
+    bucket_id = 'avatars' AND
+    auth.role() = 'authenticated'
+  );
+
+-- Policy: User bisa update avatar sendiri
+CREATE POLICY "Users can update own avatar"
+  ON storage.objects FOR UPDATE
+  USING (
+    bucket_id = 'avatars' AND
+    auth.role() = 'authenticated'
+  );
+
+-- Policy: Semua bisa lihat bukti cuti
+CREATE POLICY "Public can view leave proofs"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'leave-proofs');
+
+-- Policy: Authenticated user bisa upload bukti cuti
+CREATE POLICY "Authenticated users can upload leave proofs"
+  ON storage.objects FOR INSERT
+  WITH CHECK (
+    bucket_id = 'leave-proofs' AND
+    auth.role() = 'authenticated'
+  );
+```
+
+---
+
+### 7. Data Awal (Seed)
+
+Setelah semua setup, jalankan seed data:
+
+```sql
+-- ============================================================
+-- SEED: Company Default
+-- ============================================================
+INSERT INTO public.companies (
+  id, name, office_latitude, office_longitude, 
+  radius_meters, work_start_time, grace_period_minutes,
+  annual_leave_quota, overtime_start_after_minutes,
+  overtime_rate_per_hour, early_leave_deduction_per_minute
+) VALUES (
+  '6fbcdc6b-7558-45a8-8031-70a0eb46bda2',
+  'Default Company',
+  -6.200000,
+  106.816666,
+  100,
+  '08:00:00',
+  15,
+  12,
+  60,
+  25000,
+  1000
+) ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  updated_at = now();
+
+-- ============================================================
+-- SEED: Shifts
+-- ============================================================
+INSERT INTO public.shifts (name, start_time, end_time, working_days, break_duration_minutes, is_active) VALUES
+('Regular', '08:00:00', '17:00:00', ARRAY[1,2,3,4,5], 60, true),
+('Shift Pagi', '06:00:00', '14:00:00', ARRAY[1,2,3,4,5,6], 60, true),
+('Shift Siang', '14:00:00', '22:00:00', ARRAY[1,2,3,4,5,6], 60, true),
+('Shift Malam', '22:00:00', '06:00:00', ARRAY[1,2,3,4,5,6], 60, true)
+ON CONFLICT DO NOTHING;
+
+-- ============================================================
+-- SEED: Holidays 2025
+-- ============================================================
+INSERT INTO public.holidays (name, date, end_date, description, is_active) VALUES
+('Tahun Baru Masehi', '2025-01-01', NULL, 'Tahun Baru 2025', true),
+('Isra Mi''raj', '2025-01-27', NULL, 'Isra Mi''raj Nabi Muhammad SAW', true),
+('Tahun Baru Imlek', '2025-01-29', NULL, 'Tahun Baru Imlek 2576', true),
+('Hari Raya Nyepi', '2025-03-29', NULL, 'Tahun Baru Saka 1947', true),
+('Wafat Isa Al-Masih', '2025-04-18', NULL, 'Jumat Agung', true),
+('Hari Raya Idul Fitri', '2025-03-30', '2025-03-31', 'Idul Fitri 1446 H', true),
+('Hari Buruh', '2025-05-01', NULL, 'Hari Buruh Internasional', true),
+('Kenaikan Isa Al-Masih', '2025-05-29', NULL, 'Kenaikan Yesus Kristus', true),
+('Hari Raya Waisak', '2025-05-12', NULL, 'Waisak 2569 BE', true),
+('Hari Lahir Pancasila', '2025-06-01', NULL, 'Hari Lahir Pancasila', true),
+('Hari Raya Idul Adha', '2025-06-06', NULL, 'Idul Adha 1446 H', true),
+('Tahun Baru Islam', '2025-06-27', NULL, '1 Muharram 1447 H', true),
+('Hari Kemerdekaan', '2025-08-17', NULL, 'HUT RI ke-80', true),
+('Maulid Nabi Muhammad', '2025-09-05', NULL, 'Maulid Nabi Muhammad SAW', true),
+('Hari Natal', '2025-12-25', NULL, 'Hari Raya Natal', true)
+ON CONFLICT DO NOTHING;
+
+-- ============================================================
+-- SEED: Lokasi Contoh (Opsional)
+-- ============================================================
+INSERT INTO public.locations (name, address, latitude, longitude, radius_meters, is_active) VALUES
+('Kantor Pusat', 'Jl. Sudirman No. 1, Jakarta Pusat', -6.200000, 106.816666, 100, true)
+ON CONFLICT DO NOTHING;
+```
+
+---
+
+### 🔐 Setup User Developer Pertama
+
+Setelah semua SQL diatas dijalankan:
+
+1. **Buat User di Supabase Auth**:
+   - Buka Supabase Dashboard → Authentication → Users
+   - Klik "Add User"
+   - Email: `admin@internal.local`
+   - Password: (min 6 karakter)
+   - ✅ Centang "Auto Confirm User"
+   - Salin **User ID (UUID)** yang muncul
+
+2. **Jalankan SQL ini** (ganti UUID):
+
+```sql
+-- GANTI 'your-user-uuid-here' dengan UUID yang disalin!
+DO $$
+DECLARE
+  v_user_id UUID := 'your-user-uuid-here';
+  v_company_id UUID := '6fbcdc6b-7558-45a8-8031-70a0eb46bda2';
+  v_shift_id UUID;
+BEGIN
+  -- Ambil shift Regular
+  SELECT id INTO v_shift_id FROM shifts WHERE name = 'Regular' AND is_active = true LIMIT 1;
+  
+  -- Update role menjadi developer
+  UPDATE user_roles SET role = 'developer' WHERE user_id = v_user_id;
+  IF NOT FOUND THEN
+    INSERT INTO user_roles (user_id, role) VALUES (v_user_id, 'developer');
+  END IF;
+  
+  -- Update profile
+  UPDATE profiles SET 
+    company_id = v_company_id,
+    username = 'superadmin',
+    role = 'developer',
+    full_name = COALESCE(full_name, 'Super Admin'),
+    job_title = 'System Administrator',
+    department = 'IT',
+    shift_id = v_shift_id,
+    is_active = true,
+    requires_geofence = false,
+    employee_type = 'office'
+  WHERE user_id = v_user_id;
+  
+  RAISE NOTICE 'SUCCESS: Developer user configured!';
+END $$;
+```
+
+3. **Verifikasi**:
+
+```sql
+-- Cek user developer
+SELECT 
+  p.username,
+  p.full_name,
+  p.email,
+  ur.role,
+  c.name as company
+FROM profiles p
+JOIN user_roles ur ON p.user_id = ur.user_id
+JOIN companies c ON p.company_id = c.id
+WHERE ur.role = 'developer';
+```
+
+---
+
+### 📋 Checklist Lengkap SQL Setup
+
+| No | Item | SQL Section | Status |
+|----|------|-------------|--------|
+| 1 | Enums (app_role, employee_type) | Section 1 | ☐ |
+| 2 | Semua tabel (9 tabel) | Section 2 | ☐ |
+| 3 | Database functions (8 functions) | Section 3 | ☐ |
+| 4 | Triggers (7 triggers) | Section 4 | ☐ |
+| 5 | RLS enabled semua tabel | Section 5 | ☐ |
+| 6 | RLS policies semua tabel | Section 5 | ☐ |
+| 7 | Storage buckets (3 buckets) | Section 6 | ☐ |
+| 8 | Storage policies | Section 6 | ☐ |
+| 9 | Seed data (company, shifts, holidays) | Section 7 | ☐ |
+| 10 | User developer pertama | Setup User | ☐ |
+
+---
+
 ## 🔧 Konfigurasi Supabase Production
 
 ### 1. Edge Functions
