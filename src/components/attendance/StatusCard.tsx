@@ -133,8 +133,8 @@ const StatusCard = ({
         <div className="flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="text-xl font-bold">{title}</h3>
-            {/* Only show late badge for office employees */}
-            {employeeType === 'office' && isLate && lateMinutes && lateMinutes > 0 && (
+            {/* Only show late badge for office employees who are clocked in (not clocked out) */}
+            {employeeType === 'office' && status === 'clocked_in' && isLate && lateMinutes && lateMinutes > 0 && (
               <Badge variant="destructive" className="flex items-center gap-1">
                 <AlertTriangle className="h-3 w-3" />
                 Terlambat {lateMinutes} menit
