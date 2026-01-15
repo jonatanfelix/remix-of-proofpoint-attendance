@@ -40,10 +40,12 @@ Deno.serve(async (req) => {
   try {
     // Get authorization header
     const authHeader = req.headers.get('Authorization')
+    console.log('Auth Header present:', !!authHeader)
+
     if (!authHeader) {
       console.error('Missing authorization header')
       return new Response(
-        JSON.stringify({ error: 'Unauthorized', code: 'NO_AUTH' }),
+        JSON.stringify({ error: 'Unauthorized', code: 'NO_AUTH', details: 'Missing Authorization header' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
@@ -61,10 +63,11 @@ Deno.serve(async (req) => {
 
     // Get current user
     const { data: { user }, error: userError } = await supabaseUser.auth.getUser()
+
     if (userError || !user) {
       console.error('User auth error:', userError)
       return new Response(
-        JSON.stringify({ error: 'Unauthorized', code: 'INVALID_USER' }),
+        JSON.stringify({ error: 'Unauthorized', code: 'INVALID_USER', details: userError?.message || 'User not found' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
@@ -105,9 +108,9 @@ Deno.serve(async (req) => {
     if (accuracy_meters > MAX_ACCURACY_METERS) {
       console.warn(`Accuracy rejected: ${accuracy_meters}m for user ${user.id}`)
       return new Response(
-        JSON.stringify({ 
-          error: `Akurasi GPS terlalu rendah (${Math.round(accuracy_meters)}m). Coba di tempat terbuka.`, 
-          code: 'LOW_ACCURACY' 
+        JSON.stringify({
+          error: `Akurasi GPS terlalu rendah (${Math.round(accuracy_meters)}m). Coba di tempat terbuka.`,
+          code: 'LOW_ACCURACY'
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
@@ -158,9 +161,9 @@ Deno.serve(async (req) => {
         if (distance_to_office > company.radius_meters) {
           // Log the attempt but reject
           console.warn(`Geofence violation: User ${user.id} is ${Math.round(distance_to_office)}m from office`)
-          
+
           return new Response(
-            JSON.stringify({ 
+            JSON.stringify({
               error: `Anda berada ${Math.round(distance_to_office)}m dari kantor. Maksimal ${company.radius_meters}m untuk absen.`,
               code: 'OUTSIDE_GEOFENCE',
               distance: Math.round(distance_to_office),
@@ -185,13 +188,13 @@ Deno.serve(async (req) => {
     const wibOffset = 7 * 60 // WIB is UTC+7, offset in minutes
     const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000)
     const wibTime = new Date(utcTime + (wibOffset * 60000))
-    
+
     // Calculate today start/end in WIB then convert to UTC for query
     const todayStartWIB = new Date(wibTime)
     todayStartWIB.setHours(0, 0, 0, 0)
     const todayEndWIB = new Date(wibTime)
     todayEndWIB.setHours(23, 59, 59, 999)
-    
+
     // Convert back to UTC for database query
     const todayStartUTC = new Date(todayStartWIB.getTime() - (wibOffset * 60000))
     const todayEndUTC = new Date(todayEndWIB.getTime() - (wibOffset * 60000))
@@ -211,12 +214,12 @@ Deno.serve(async (req) => {
     } else {
       // Check if already clocked in/out today
       const lastRecord = existingRecords?.[0]
-      
+
       if (record_type === 'clock_in') {
         // Can only clock in if not already clocked in, or if last record is clock_out
         if (lastRecord?.record_type === 'clock_in' || lastRecord?.record_type === 'break_out') {
           return new Response(
-            JSON.stringify({ 
+            JSON.stringify({
               error: 'Anda sudah clock in hari ini. Clock out dulu sebelum clock in lagi.',
               code: 'ALREADY_CLOCKED_IN'
             }),
@@ -227,7 +230,7 @@ Deno.serve(async (req) => {
         // Can only clock out if last record is clock_in or break_in
         if (!lastRecord || (lastRecord.record_type !== 'clock_in' && lastRecord.record_type !== 'break_in')) {
           return new Response(
-            JSON.stringify({ 
+            JSON.stringify({
               error: 'Tidak dapat clock out karena belum clock in.',
               code: 'NOT_CLOCKED_IN'
             }),
@@ -238,7 +241,7 @@ Deno.serve(async (req) => {
         // Can only break out if last record is clock_in or break_in
         if (!lastRecord || (lastRecord.record_type !== 'clock_in' && lastRecord.record_type !== 'break_in')) {
           return new Response(
-            JSON.stringify({ 
+            JSON.stringify({
               error: 'Tidak dapat istirahat karena belum clock in.',
               code: 'NOT_CLOCKED_IN'
             }),
@@ -249,7 +252,7 @@ Deno.serve(async (req) => {
         // Can only break in if last record is break_out
         if (!lastRecord || lastRecord.record_type !== 'break_out') {
           return new Response(
-            JSON.stringify({ 
+            JSON.stringify({
               error: 'Tidak dapat kembali dari istirahat karena belum istirahat keluar.',
               code: 'NOT_ON_BREAK'
             }),

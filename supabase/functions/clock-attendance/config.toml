@@ -1,0 +1,2 @@
+[functions.clock-attendance]
+verify_jwt = false

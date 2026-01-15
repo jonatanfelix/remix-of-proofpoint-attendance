@@ -96,7 +96,7 @@ const Clock = () => {
     queryKey: ['company-settings', profile?.company_id],
     queryFn: async () => {
       if (!profile?.company_id) return null;
-      
+
       const { data, error } = await supabase
         .from('companies')
         .select('*')
@@ -174,7 +174,7 @@ const Clock = () => {
 
   const todayClockIn = useMemo(() => {
     if (!recentRecords) return null;
-    
+
     return recentRecords.find((r) => {
       const recordDate = new Date(r.recorded_at);
       recordDate.setHours(0, 0, 0, 0);
@@ -216,13 +216,13 @@ const Clock = () => {
 
   // Calculate lateness - ONLY for office employees, considering grace period
   const gracePeriodMinutes = company?.grace_period_minutes || 0;
-  
+
   const calculateLateness = useCallback((checkCurrentTime: boolean = false) => {
     // If profile not loaded yet, don't calculate lateness
     if (!profile) {
       return { isLate: false, lateMinutes: 0 };
     }
-    
+
     // Field employees don't have lateness - they work based on duration
     if (profile.employee_type === 'field') {
       return { isLate: false, lateMinutes: 0 };
@@ -230,7 +230,7 @@ const Clock = () => {
 
     const now = new Date();
     const [hours, minutes] = effectiveWorkStartTime.split(':').map(Number);
-    
+
     const workStartToday = new Date(now);
     workStartToday.setHours(hours, minutes, 0, 0);
 
@@ -266,6 +266,15 @@ const Clock = () => {
     setLocationError(null);
 
     try {
+      if (import.meta.env.DEV && company?.office_latitude && company?.office_longitude) {
+        console.log('[Dev] Using mocked office location');
+        setCurrentPosition({
+          latitude: company.office_latitude,
+          longitude: company.office_longitude,
+          accuracy: 10
+        });
+        return;
+      }
       const position = await getCurrentPosition();
       setCurrentPosition(position);
     } catch (err) {
@@ -274,7 +283,7 @@ const Clock = () => {
     } finally {
       setLocationLoading(false);
     }
-  }, []);
+  }, [company?.office_latitude, company?.office_longitude]);
 
   // Pre-load face detection model when Clock page loads
   useEffect(() => {
@@ -334,6 +343,12 @@ const Clock = () => {
         throw new Error('Foto wajib diambil untuk absensi.');
       }
 
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) {
+        throw new Error('Sesi tidak valid. Silakan login ulang.');
+      }
+
       const { data, error } = await supabase.functions.invoke('clock-attendance', {
         body: {
           record_type: recordType,
@@ -342,10 +357,19 @@ const Clock = () => {
           accuracy_meters: currentPosition.accuracy,
           photo_url: photoUrl,
         },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
       });
 
-      if (error) throw error;
-      
+      if (error) {
+        console.error('[Clock] Invoke error:', error);
+        if (JSON.stringify(error).includes('401') || (error as any)?.code === 'NO_AUTH' || (error as any)?.code === 'INVALID_USER') {
+          throw new Error('Sesi kadaluarsa. Silakan Logout dan Login kembali.');
+        }
+        throw error;
+      }
+
       if (data?.error) {
         throw new Error(data.error);
       }
@@ -444,11 +468,11 @@ const Clock = () => {
   const distanceToOffice =
     currentPosition && company?.office_latitude && company?.office_longitude
       ? calculateDistance(
-          currentPosition.latitude,
-          currentPosition.longitude,
-          company.office_latitude,
-          company.office_longitude
-        )
+        currentPosition.latitude,
+        currentPosition.longitude,
+        company.office_latitude,
+        company.office_longitude
+      )
       : null;
 
   const isWithinGeofence =
@@ -531,7 +555,7 @@ const Clock = () => {
                   <div>
                     <p className="font-medium text-destructive">Di Luar Jangkauan Kantor</p>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Anda berada {Math.round(distanceToOffice)}m dari kantor. 
+                      Anda berada {Math.round(distanceToOffice)}m dari kantor.
                       Maksimal {company?.radius_meters || 100}m untuk bisa absen.
                     </p>
                   </div>
@@ -586,17 +610,17 @@ const Clock = () => {
                       {locationLoading
                         ? 'Mendapatkan lokasi...'
                         : locationError
-                        ? 'Lokasi Error'
-                        : currentPosition
-                        ? 'Lokasi Tersedia'
-                        : 'Lokasi Belum Tersedia'}
+                          ? 'Lokasi Error'
+                          : currentPosition
+                            ? 'Lokasi Tersedia'
+                            : 'Lokasi Belum Tersedia'}
                     </p>
                     <p className="text-sm text-muted-foreground">
                       {locationError
                         ? locationError
                         : currentPosition
-                        ? `Akurasi: ±${Math.round(currentPosition.accuracy)}m`
-                        : 'Klik tombol Update Lokasi'}
+                          ? `Akurasi: ±${Math.round(currentPosition.accuracy)}m`
+                          : 'Klik tombol Update Lokasi'}
                     </p>
                   </div>
 
@@ -662,9 +686,9 @@ const Clock = () => {
             employeeName={profile?.full_name || user?.email || 'Employee'}
             recordType={
               pendingRecordType === 'clock_in' ? 'CLOCK IN' :
-              pendingRecordType === 'clock_out' ? 'CLOCK OUT' :
-              pendingRecordType === 'break_out' ? 'ISTIRAHAT KELUAR' :
-              pendingRecordType === 'break_in' ? 'KEMBALI ISTIRAHAT' : 'ABSENSI'
+                pendingRecordType === 'clock_out' ? 'CLOCK OUT' :
+                  pendingRecordType === 'break_out' ? 'ISTIRAHAT KELUAR' :
+                    pendingRecordType === 'break_in' ? 'KEMBALI ISTIRAHAT' : 'ABSENSI'
             }
             latitude={currentPosition.latitude}
             longitude={currentPosition.longitude}

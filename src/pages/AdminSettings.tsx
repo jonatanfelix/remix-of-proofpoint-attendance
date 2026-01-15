@@ -9,9 +9,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { getCurrentPosition } from '@/lib/geolocation';
-import { 
-  MapPin, Save, Building, Clock, Target, Loader2, Navigation, 
-  Plus, Trash2, Edit, Check, X 
+import {
+  MapPin, Save, Building, Clock, Target, Loader2, Navigation,
+  Plus, Trash2, Edit, Check, X
 } from 'lucide-react';
 import { toast } from 'sonner';
 import L from 'leaflet';
@@ -57,6 +57,8 @@ interface CompanySettings {
   overtime_start_after_minutes: number;
   overtime_rate_per_hour: number;
   early_leave_deduction_per_minute: number;
+  late_penalty_per_minute: number;
+  standard_work_hours: number;
 }
 
 const AdminSettings = () => {
@@ -74,6 +76,8 @@ const AdminSettings = () => {
   const [overtimeStartAfter, setOvertimeStartAfter] = useState(0);
   const [overtimeRate, setOvertimeRate] = useState(0);
   const [earlyLeaveDeduction, setEarlyLeaveDeduction] = useState(0);
+  const [latePenalty, setLatePenalty] = useState(1000);
+  const [standardWorkHours, setStandardWorkHours] = useState(8);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [mapReady, setMapReady] = useState(false);
 
@@ -107,7 +111,7 @@ const AdminSettings = () => {
         .select('role')
         .eq('user_id', user.id)
         .maybeSingle();
-      
+
       if (error) throw error;
       return data?.role;
     },
@@ -125,7 +129,7 @@ const AdminSettings = () => {
         .select('*')
         .limit(1)
         .maybeSingle();
-      
+
       if (error) throw error;
       return data as CompanySettings | null;
     },
@@ -140,7 +144,7 @@ const AdminSettings = () => {
         .from('shifts')
         .select('*')
         .order('name');
-      
+
       if (error) throw error;
       return data as Shift[];
     },
@@ -158,10 +162,12 @@ const AdminSettings = () => {
       radiusRef.current = company.radius_meters;
       setWorkStartTime(company.work_start_time?.slice(0, 5) || '08:00');
       setGracePeriod(company.grace_period_minutes || 0);
-      setAnnualLeaveQuota(company.annual_leave_quota || 12);
+      setAnnualLeaveQuota(company.annual_leave_quota ?? 12);
       setOvertimeStartAfter(company.overtime_start_after_minutes || 0);
       setOvertimeRate(company.overtime_rate_per_hour || 0);
       setEarlyLeaveDeduction(company.early_leave_deduction_per_minute || 0);
+      setLatePenalty(company.late_penalty_per_minute || 1000);
+      setStandardWorkHours(company.standard_work_hours || 8);
     }
   }, [company]);
 
@@ -174,7 +180,7 @@ const AdminSettings = () => {
   const updateMutation = useMutation({
     mutationFn: async () => {
       if (!company?.id) throw new Error('Company not found');
-      
+
       const { error } = await supabase
         .from('companies')
         .update({
@@ -188,9 +194,11 @@ const AdminSettings = () => {
           overtime_start_after_minutes: overtimeStartAfter,
           overtime_rate_per_hour: overtimeRate,
           early_leave_deduction_per_minute: earlyLeaveDeduction,
+          late_penalty_per_minute: latePenalty,
+          standard_work_hours: standardWorkHours,
         })
         .eq('id', company.id);
-      
+
       if (error) throw error;
     },
     onSuccess: () => {
@@ -271,7 +279,7 @@ const AdminSettings = () => {
     mutationFn: async () => {
       if (!newShiftName.trim()) throw new Error('Nama shift harus diisi');
       if (newShiftWorkingDays.length === 0) throw new Error('Pilih minimal 1 hari kerja');
-      
+
       const { error } = await supabase
         .from('shifts')
         .insert({
@@ -281,7 +289,7 @@ const AdminSettings = () => {
           working_days: newShiftWorkingDays,
           break_duration_minutes: newShiftBreakDuration,
         });
-      
+
       if (error) throw error;
     },
     onSuccess: () => {
@@ -301,7 +309,7 @@ const AdminSettings = () => {
   const updateShiftMutation = useMutation({
     mutationFn: async () => {
       if (!editingShift) return;
-      
+
       const { error } = await supabase
         .from('shifts')
         .update({
@@ -312,7 +320,7 @@ const AdminSettings = () => {
           break_duration_minutes: editShiftBreakDuration,
         })
         .eq('id', editingShift.id);
-      
+
       if (error) throw error;
     },
     onSuccess: () => {
@@ -327,11 +335,39 @@ const AdminSettings = () => {
 
   const deleteShiftMutation = useMutation({
     mutationFn: async (shiftId: string) => {
+      // 1. Check if any users are using this shift
+      const { count, error: countError } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('shift_id', shiftId);
+
+      if (countError) throw countError;
+
+      // 2. If users exist, ask for confirmation
+      if (count && count > 0) {
+        const confirmed = window.confirm(
+          `Shift ini sedang digunakan oleh ${count} karyawan. \n\nApakah Anda yakin ingin menghapus shift ini? \nKaryawan tersebut akan dikembalikan ke jam kerja default.`
+        );
+
+        if (!confirmed) {
+          throw new Error('Penghapusan dibatalkan');
+        }
+
+        // 3. Unassign users (set shift_id to null)
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ shift_id: null })
+          .eq('shift_id', shiftId);
+
+        if (updateError) throw updateError;
+      }
+
+      // 4. Delete the shift
       const { error } = await supabase
         .from('shifts')
         .delete()
         .eq('id', shiftId);
-      
+
       if (error) throw error;
     },
     onSuccess: () => {
@@ -339,7 +375,9 @@ const AdminSettings = () => {
       toast.success('Shift berhasil dihapus!');
     },
     onError: (error) => {
-      toast.error('Gagal menghapus shift: ' + error.message);
+      if (error.message !== 'Penghapusan dibatalkan') {
+        toast.error('Gagal menghapus shift: ' + error.message);
+      }
     },
   });
 
@@ -363,11 +401,11 @@ const AdminSettings = () => {
 
   const toggleWorkingDay = (day: number, isNew: boolean) => {
     if (isNew) {
-      setNewShiftWorkingDays(prev => 
+      setNewShiftWorkingDays(prev =>
         prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day].sort()
       );
     } else {
-      setEditShiftWorkingDays(prev => 
+      setEditShiftWorkingDays(prev =>
         prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day].sort()
       );
     }
@@ -378,7 +416,7 @@ const AdminSettings = () => {
     if (!mapRef.current || mapInstanceRef.current) return;
 
     console.log('[AdminSettings] Initializing map');
-    
+
     // Default to Jakarta if no company location yet
     const defaultLat = -6.2088;
     const defaultLng = 106.8456;
@@ -393,11 +431,16 @@ const AdminSettings = () => {
       maxZoom: 19,
     }).addTo(mapInstanceRef.current);
 
+    // Fix for map not rendering tiles correctly
+    setTimeout(() => {
+      mapInstanceRef.current?.invalidateSize();
+    }, 100);
+
     // Add click handler - directly update state and map
     mapInstanceRef.current.on('click', (e: L.LeafletMouseEvent) => {
       const { lat, lng } = e.latlng;
       console.log('[AdminSettings] Map clicked at:', lat, lng);
-      
+
       // Update state
       setLatitude(lat);
       setLongitude(lng);
@@ -435,18 +478,18 @@ const AdminSettings = () => {
         circleRef.current = null;
       }
     };
-  }, []);
+  }, [roleLoading, companyLoading]);
 
   // Update map when company data loads
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current || companyLoading) return;
-    
+
     const centerLat = company?.office_latitude;
     const centerLng = company?.office_longitude;
-    
+
     if (centerLat != null && centerLng != null) {
       console.log('[AdminSettings] Setting map to company location:', centerLat, centerLng);
-      
+
       mapInstanceRef.current.setView([centerLat, centerLng], 17);
 
       // Add or update marker
@@ -621,6 +664,22 @@ const AdminSettings = () => {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="standard-hours">Jam Kerja Standar (jam/hari)</Label>
+                <Input
+                  id="standard-hours"
+                  type="number"
+                  min={1}
+                  max={24}
+                  value={standardWorkHours}
+                  onChange={(e) => setStandardWorkHours(Number(e.target.value))}
+                  className="border-2 border-foreground"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Digunakan untuk perhitungan total jam kerja dalam payroll
+                </p>
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="overtime-rate">Rate Lembur per Jam (Rp)</Label>
                 <Input
                   id="overtime-rate"
@@ -644,6 +703,21 @@ const AdminSettings = () => {
                 />
                 <p className="text-xs text-muted-foreground">
                   Isi 0 jika tidak ada potongan untuk pulang lebih awal
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="late-penalty">Denda Keterlambatan per Menit (Rp)</Label>
+                <Input
+                  id="late-penalty"
+                  type="number"
+                  min={0}
+                  value={latePenalty}
+                  onChange={(e) => setLatePenalty(Number(e.target.value))}
+                  className="border-2 border-foreground"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Default: 1000. Dihitung setelah lewat masa toleransi.
                 </p>
               </div>
             </CardContent>
@@ -789,7 +863,7 @@ const AdminSettings = () => {
                   </div>
                 </div>
               </div>
-              
+
               {/* Working days selection */}
               <div className="space-y-2">
                 <Label className="text-xs">Hari Kerja:</Label>
@@ -823,7 +897,7 @@ const AdminSettings = () => {
                 <span className="text-xs text-muted-foreground">menit</span>
               </div>
 
-              <Button 
+              <Button
                 onClick={() => addShiftMutation.mutate()}
                 disabled={addShiftMutation.isPending || !newShiftName.trim() || newShiftWorkingDays.length === 0}
                 className="w-full sm:w-auto"
@@ -841,7 +915,7 @@ const AdminSettings = () => {
                 <p className="text-muted-foreground text-center py-4">Belum ada shift. Tambahkan shift pertama di atas.</p>
               ) : (
                 shifts?.map((shift) => (
-                  <div 
+                  <div
                     key={shift.id}
                     className="p-3 rounded-lg border-2 border-foreground"
                   >
@@ -868,7 +942,7 @@ const AdminSettings = () => {
                             />
                           </div>
                         </div>
-                        
+
                         {/* Edit working days */}
                         <div className="space-y-2">
                           <Label className="text-xs">Hari Kerja:</Label>
@@ -933,11 +1007,10 @@ const AdminSettings = () => {
                             {DAYS_OF_WEEK.map((day) => (
                               <span
                                 key={day.value}
-                                className={`text-xs px-1.5 py-0.5 rounded ${
-                                  (shift.working_days || [1,2,3,4,5]).includes(day.value)
-                                    ? 'bg-primary text-primary-foreground'
-                                    : 'bg-muted text-muted-foreground'
-                                }`}
+                                className={`text-xs px-1.5 py-0.5 rounded ${(shift.working_days || [1, 2, 3, 4, 5]).includes(day.value)
+                                  ? 'bg-primary text-primary-foreground'
+                                  : 'bg-muted text-muted-foreground'
+                                  }`}
                               >
                                 {day.label}
                               </span>
@@ -979,7 +1052,7 @@ const AdminSettings = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div 
+            <div
               ref={mapRef}
               className="h-[400px] rounded-lg overflow-hidden border-2 border-foreground"
               style={{ minHeight: '400px' }}

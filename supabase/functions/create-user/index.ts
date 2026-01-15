@@ -103,7 +103,7 @@ Deno.serve(async (req) => {
     // Input validation
     const trimmedFullName = String(fullName).trim();
     const trimmedPassword = String(password);
-    
+
     // Validate fullName
     if (trimmedFullName.length < 2 || trimmedFullName.length > 100) {
       return new Response(
@@ -111,16 +111,16 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-    
+
     // Validate fullName format (only letters, spaces, and common name characters)
-    const nameRegex = /^[a-zA-Z\s'.,-]+$/;
+    const nameRegex = /^[a-zA-Z0-9\s'.,-]+$/;
     if (!nameRegex.test(trimmedFullName)) {
       return new Response(
         JSON.stringify({ error: 'Nama hanya boleh mengandung huruf dan spasi' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-    
+
     // Validate password
     if (trimmedPassword.length < 6 || trimmedPassword.length > 72) {
       return new Response(
@@ -131,7 +131,7 @@ Deno.serve(async (req) => {
 
     // Generate username from fullName (lowercase, replace spaces with dots)
     const baseUsername = trimmedFullName.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '');
-    
+
     // Check if username already exists and add number if needed
     let username = baseUsername;
     let counter = 1;
@@ -141,14 +141,14 @@ Deno.serve(async (req) => {
         .select('id')
         .eq('username', username)
         .maybeSingle();
-      
+
       if (!existingUser) break;
       username = `${baseUsername}${counter}`;
       counter++;
     }
 
     // Generate internal email from username (not shown to users)
-    const email = `${username}@internal.local`;
+    let email = `${username}@internal.local`;
 
     // Validate role assignment permissions
     // Developer can create admin or employee
@@ -176,25 +176,59 @@ Deno.serve(async (req) => {
 
     console.log('Creating user:', { username, email, fullName, role: newUserRole, company_id: adminCompanyId });
 
-    // Create user using admin API
-    const { data: createData, error: createError } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password: trimmedPassword,
-      email_confirm: true,
-      user_metadata: {
-        full_name: trimmedFullName,
-      },
-    });
+    // Loop to try creating user (handling potential email collisions in Auth but not in Profiles)
+    let newUser;
+    let finalUsername = username;
+    let createAttempts = 0;
+    const MAX_CREATE_ATTEMPTS = 5;
 
-    if (createError) {
-      console.error('Create user error:', createError);
+    while (createAttempts < MAX_CREATE_ATTEMPTS) {
+      if (createAttempts > 0) {
+        // Generate new username with suffix if retrying
+        counter++;
+        finalUsername = `${baseUsername}${counter}`;
+      }
+
+      const emailAttempt = `${finalUsername}@internal.local`;
+
+      console.log(`Attempt ${createAttempts + 1}: Creating user with email ${emailAttempt}`);
+
+      const { data: createData, error: createError } = await supabaseAdmin.auth.admin.createUser({
+        email: emailAttempt,
+        password: trimmedPassword,
+        email_confirm: true,
+        user_metadata: {
+          full_name: trimmedFullName,
+        },
+      });
+
+      if (!createError && createData.user) {
+        newUser = createData.user;
+        username = finalUsername; // Update the variable for later use
+        email = emailAttempt;
+        break;
+      }
+
+      console.warn(`Failed to create user ${emailAttempt}:`, createError?.message);
+
+      // If error is NOT about already registered, break and return error
+      if (!createError?.message?.includes('already registered') && !createError?.message?.includes('already has been registered')) {
+        return new Response(
+          JSON.stringify({ error: createError?.message || 'Failed to create user' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      createAttempts++;
+    }
+
+    if (!newUser) {
       return new Response(
-        JSON.stringify({ error: createError.message }),
+        JSON.stringify({ error: 'Failed to find unique username after multiple attempts' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const newUser = createData.user;
     console.log('User created:', newUser.id);
 
     // Update the role in user_roles table (trigger creates with 'employee' default)
@@ -232,14 +266,14 @@ Deno.serve(async (req) => {
     console.log('User created successfully with username:', username, 'role:', newUserRole, 'company_id:', adminCompanyId);
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        user: { 
-          id: newUser.id, 
+      JSON.stringify({
+        success: true,
+        user: {
+          id: newUser.id,
           username: username,
           role: newUserRole,
           company_id: adminCompanyId
-        } 
+        }
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

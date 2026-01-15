@@ -180,6 +180,16 @@ const History = () => {
                                   ±{Math.round(record.accuracy_meters)}m
                                 </p>
                               )}
+                              {record.photo_url && (
+                                <Button
+                                  variant="link"
+                                  size="sm"
+                                  className="h-auto p-0 text-xs mt-1"
+                                  onClick={() => window.open(record.photo_url || '', '_blank')}
+                                >
+                                  Lihat Foto
+                                </Button>
+                              )}
                             </div>
                           </div>
                         ))}

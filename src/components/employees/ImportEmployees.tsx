@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { downloadBlob } from '@/lib/download';
 import * as XLSX from 'xlsx';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -56,11 +57,11 @@ export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmploy
   const handleDownloadTemplate = () => {
     // Create workbook
     const wb = XLSX.utils.book_new();
-    
+
     // Get actual shift names from database
     const shiftNames = shifts.map(s => s.name);
     const defaultShift = shiftNames.length > 0 ? shiftNames[0] : '';
-    
+
     // Create instructions sheet
     const instructionsData = [
       ['PETUNJUK PENGGUNAAN TEMPLATE IMPORT KARYAWAN'],
@@ -94,11 +95,11 @@ export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmploy
       ['- Jika shift kosong, karyawan tidak punya jadwal'],
       ['- Username akan digenerate otomatis dari nama'],
     ].filter(row => row.length > 0);
-    
+
     const wsInstructions = XLSX.utils.aoa_to_sheet(instructionsData);
     wsInstructions['!cols'] = [{ wch: 60 }];
     XLSX.utils.book_append_sheet(wb, wsInstructions, 'Petunjuk');
-    
+
     // Create reference sheet with shift list for easy copy-paste
     const refData = [
       ['SHIFT (Copy-Paste ke kolom shift)'],
@@ -111,7 +112,7 @@ export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmploy
     const wsRef = XLSX.utils.aoa_to_sheet(refData);
     wsRef['!cols'] = [{ wch: 40 }];
     XLSX.utils.book_append_sheet(wb, wsRef, 'Referensi');
-    
+
     // Create data sheet with headers and example using actual shift names
     const exampleData = [
       ['nama_lengkap*', 'password*', 'jabatan', 'departemen', 'shift', 'role'],
@@ -121,7 +122,7 @@ export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmploy
       ['', '', '', '', '', ''],
       ['', '', '', '', '', ''],
     ];
-    
+
     const wsData = XLSX.utils.aoa_to_sheet(exampleData);
     wsData['!cols'] = [
       { wch: 25 }, // nama_lengkap
@@ -132,16 +133,19 @@ export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmploy
       { wch: 12 }, // role
     ];
     XLSX.utils.book_append_sheet(wb, wsData, 'Data Karyawan');
-    
-    // Download file
-    XLSX.writeFile(wb, 'Template_Import_Karyawan.xlsx');
+
+    // Genericize download to fix browser issues
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    downloadBlob(blob, 'Template_Import_Karyawan.xlsx');
+
     toast.success('Template berhasil diunduh! Lihat sheet "Petunjuk" dan "Referensi"');
   };
 
   // Find shift ID by name
   const findShiftId = (shiftName: string): string | null => {
     if (!shiftName) return null;
-    const shift = shifts.find(s => 
+    const shift = shifts.find(s =>
       s.name.toLowerCase().includes(shiftName.toLowerCase()) ||
       shiftName.toLowerCase().includes(s.name.toLowerCase())
     );
@@ -150,21 +154,21 @@ export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmploy
 
   // Wait and retry profile update (handle race condition with trigger)
   const updateProfileWithRetry = async (
-    userId: string, 
+    userId: string,
     updates: { job_title?: string | null; department?: string | null; shift_id?: string | null },
     maxRetries = 3,
     delayMs = 500
   ): Promise<boolean> => {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       await new Promise(resolve => setTimeout(resolve, delayMs * (attempt + 1)));
-      
+
       const { error } = await supabase
         .from('profiles')
         .update(updates)
         .eq('user_id', userId);
-      
+
       if (!error) return true;
-      
+
       console.log(`Profile update attempt ${attempt + 1} failed, retrying...`);
     }
     return false;
@@ -247,17 +251,17 @@ export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmploy
       // Read file
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
-      
+
       // Find data sheet
       let sheetName = 'Data Karyawan';
       if (!workbook.SheetNames.includes(sheetName)) {
         // Try first sheet that's not instructions
         sheetName = workbook.SheetNames.find(s => s !== 'Petunjuk') || workbook.SheetNames[0];
       }
-      
+
       const worksheet = workbook.Sheets[sheetName];
       const jsonData = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet);
-      
+
       if (jsonData.length === 0) {
         toast.error('File tidak berisi data');
         setIsImporting(false);
@@ -287,7 +291,7 @@ export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmploy
       let successCount = 0;
       for (let i = 0; i < normalizedData.length; i++) {
         const row = normalizedData[i];
-        
+
         const result = await importEmployee({
           nama_lengkap: String(row.nama_lengkap || ''),
           password: String(row.password || ''),
@@ -310,10 +314,10 @@ export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmploy
         });
 
         if (result.success) successCount++;
-        
+
         // Update progress
         setImportProgress(Math.round(((i + 1) / normalizedData.length) * 100));
-        
+
         // Small delay between requests to avoid rate limiting
         await new Promise(resolve => setTimeout(resolve, 300));
       }
@@ -362,15 +366,15 @@ export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmploy
 
       {/* Action Buttons */}
       <div className="flex gap-2">
-        <Button 
-          variant="outline" 
+        <Button
+          variant="outline"
           onClick={handleDownloadTemplate}
           className="border-2 border-foreground"
         >
           <Download className="h-4 w-4 mr-2" />
           Template Excel
         </Button>
-        <Button 
+        <Button
           variant="outline"
           onClick={() => fileInputRef.current?.click()}
           className="border-2 border-foreground"
@@ -391,7 +395,7 @@ export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmploy
               {isImporting ? 'Mengimport Karyawan...' : 'Hasil Import'}
             </DialogTitle>
             <DialogDescription>
-              {isImporting 
+              {isImporting
                 ? `Memproses ${importResults.length} data karyawan`
                 : `Selesai memproses ${importResults.length} data`
               }
@@ -426,15 +430,14 @@ export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmploy
             <ScrollArea className="h-[300px] rounded-lg border-2 border-foreground">
               <div className="p-4 space-y-2">
                 {importResults.map((result, index) => (
-                  <div 
+                  <div
                     key={index}
-                    className={`flex items-center justify-between p-3 rounded-lg border ${
-                      result.status === 'success' 
-                        ? 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800' 
-                        : result.status === 'error'
+                    className={`flex items-center justify-between p-3 rounded-lg border ${result.status === 'success'
+                      ? 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800'
+                      : result.status === 'error'
                         ? 'bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800'
                         : 'bg-muted border-muted-foreground/20'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center gap-3">
                       {result.status === 'pending' && (
@@ -456,9 +459,8 @@ export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmploy
                       </div>
                     </div>
                     {result.message && (
-                      <div className={`text-xs max-w-[200px] text-right ${
-                        result.status === 'error' ? 'text-destructive' : 'text-muted-foreground'
-                      }`}>
+                      <div className={`text-xs max-w-[200px] text-right ${result.status === 'error' ? 'text-destructive' : 'text-muted-foreground'
+                        }`}>
                         {result.message}
                       </div>
                     )}
@@ -469,7 +471,7 @@ export const ImportEmployees = ({ shifts, isDeveloper, onSuccess }: ImportEmploy
           </div>
 
           <div className="flex justify-end">
-            <Button 
+            <Button
               onClick={() => setShowImportDialog(false)}
               disabled={isImporting}
             >

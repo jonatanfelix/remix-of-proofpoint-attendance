@@ -1,4 +1,6 @@
 import { useState, useMemo } from 'react';
+import { downloadBlob } from '@/lib/download';
+
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -17,8 +19,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { 
-  Download, DollarSign, Calculator, Clock, 
+import {
+  Download, DollarSign, Calculator, Clock,
   AlertTriangle, Loader2, FileSpreadsheet, Info
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -77,9 +79,9 @@ interface PayrollData {
   permitDays: number;
 }
 
-// Late penalty configuration (can be made configurable later)
-const LATE_PENALTY_PER_MINUTE = 1000; // Rp 1.000 per menit telat
-const STANDARD_WORK_HOURS = 8;
+// Late penalty configuration (Now configurable via DB)
+// const LATE_PENALTY_PER_MINUTE = 1000; 
+// const STANDARD_WORK_HOURS = 8;
 
 const AdminPayroll = () => {
   const { user } = useAuth();
@@ -127,7 +129,7 @@ const AdminPayroll = () => {
     queryFn: async () => {
       const { data } = await supabase
         .from('companies')
-        .select('work_start_time')
+        .select('work_start_time, late_penalty_per_minute, standard_work_hours')
         .limit(1)
         .maybeSingle();
       return data;
@@ -227,6 +229,10 @@ const AdminPayroll = () => {
       let totalLateMinutes = 0;
       let totalWorkHours = 0;
       let overtimeHours = 0;
+      let lateDeduction = 0;
+
+      const standardWorkHours = (company as any)?.standard_work_hours || 8;
+      const latePenaltyPerMinute = (company as any)?.late_penalty_per_minute || 1000;
       let sickDays = 0;
       let leaveDays = 0;
       let permitDays = 0;
@@ -289,8 +295,8 @@ const AdminPayroll = () => {
           totalWorkHours += hoursWorked;
 
           // Calculate overtime (hours beyond standard)
-          if (hoursWorked > STANDARD_WORK_HOURS) {
-            overtimeHours += hoursWorked - STANDARD_WORK_HOURS;
+          if (hoursWorked > standardWorkHours) {
+            overtimeHours += hoursWorked - standardWorkHours;
           }
         }
 
@@ -314,7 +320,7 @@ const AdminPayroll = () => {
         absentDays,
         lateDays,
         totalLateMinutes,
-        lateDeduction: totalLateMinutes * LATE_PENALTY_PER_MINUTE,
+        lateDeduction: totalLateMinutes * latePenaltyPerMinute,
         totalWorkHours: Math.round(totalWorkHours * 10) / 10,
         overtimeHours: Math.round(overtimeHours * 10) / 10,
         sickDays,
@@ -339,11 +345,11 @@ const AdminPayroll = () => {
         [`Periode: ${monthLabel}`],
         [`Diekspor oleh: ${exportedBy}`],
         [`Waktu export: ${exportDate}`],
-        [`Catatan: Potongan telat = Rp ${LATE_PENALTY_PER_MINUTE.toLocaleString('id-ID')}/menit`],
+        [`Catatan: Potongan telat = Rp ${(company as any)?.late_penalty_per_minute?.toLocaleString('id-ID') || '1.000'}/menit`],
         [],
         [
-          'No', 'Nama Karyawan', 'Departemen', 'Tipe', 
-          'Hari Kerja', 'Hadir', 'Alpa', 
+          'No', 'Nama Karyawan', 'Departemen', 'Tipe',
+          'Hari Kerja', 'Hadir', 'Alpa',
           'Telat (hari)', 'Total Telat (menit)', 'Potongan Telat (Rp)',
           'Total Jam Kerja', 'Jam Lembur',
           'Cuti', 'Sakit', 'Izin'
@@ -366,7 +372,7 @@ const AdminPayroll = () => {
           r.permitDays,
         ]),
         [],
-        ['', '', '', 'TOTAL', 
+        ['', '', '', 'TOTAL',
           payrollData.reduce((s, r) => s + r.workingDays, 0),
           payrollData.reduce((s, r) => s + r.presentDays, 0),
           payrollData.reduce((s, r) => s + r.absentDays, 0),
@@ -414,7 +420,11 @@ const AdminPayroll = () => {
         p_user_agent: navigator.userAgent,
       });
 
-      XLSX.writeFile(wb, `${fileName}.xlsx`);
+      // Robust download handling with custom utility
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      downloadBlob(blob, `${fileName}.xlsx`);
+
       toast.success(`Data payroll diekspor: ${fileName}.xlsx`);
     } catch (error) {
       console.error('Export error:', error);
@@ -475,8 +485,8 @@ const AdminPayroll = () => {
                 Export data kehadiran siap hitung penggajian
               </p>
             </div>
-            <Button 
-              onClick={exportPayrollXLSX} 
+            <Button
+              onClick={exportPayrollXLSX}
               disabled={!payrollData.length || isExporting}
               className="border-2 border-foreground"
             >
@@ -497,7 +507,7 @@ const AdminPayroll = () => {
                 <div className="text-sm">
                   <p className="font-medium">Format Payroll Ready</p>
                   <p className="text-muted-foreground">
-                    Data mencakup: hari kerja, kehadiran, keterlambatan, potongan, jam kerja, dan lembur. 
+                    Data mencakup: hari kerja, kehadiran, keterlambatan, potongan, jam kerja, dan lembur.
                     Siap diimpor ke sistem penggajian.
                   </p>
                 </div>
@@ -522,7 +532,7 @@ const AdminPayroll = () => {
                   />
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  Potongan telat: Rp {LATE_PENALTY_PER_MINUTE.toLocaleString('id-ID')}/menit
+                  Potongan telat: Rp {(company?.late_penalty_per_minute || 1000).toLocaleString('id-ID')}/menit
                 </div>
               </div>
             </CardContent>

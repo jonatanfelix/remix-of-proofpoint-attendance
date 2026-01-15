@@ -98,7 +98,7 @@ const Dashboard = () => {
     queryKey: ['company-settings', profile?.company_id],
     queryFn: async () => {
       if (!profile?.company_id) return null;
-      
+
       const { data, error } = await supabase
         .from('companies')
         .select('*')
@@ -177,7 +177,7 @@ const Dashboard = () => {
   // Get today's clock in record specifically
   const todayClockIn = useMemo(() => {
     if (!recentRecords) return null;
-    
+
     return recentRecords.find((r) => {
       const recordDate = new Date(r.recorded_at);
       recordDate.setHours(0, 0, 0, 0);
@@ -228,13 +228,13 @@ const Dashboard = () => {
   // Calculate lateness based on existing clock-in or current time for new clock-in
   // ONLY for office employees - field employees don't have lateness concept
   const gracePeriodMinutes = company?.grace_period_minutes || 0;
-  
+
   const calculateLateness = useCallback((checkCurrentTime: boolean = false) => {
     // If profile not loaded yet, don't calculate lateness
     if (!profile) {
       return { isLate: false, lateMinutes: 0 };
     }
-    
+
     // Field employees don't have lateness - they work based on duration
     if (profile.employee_type === 'field') {
       return { isLate: false, lateMinutes: 0 };
@@ -242,7 +242,7 @@ const Dashboard = () => {
 
     const now = new Date();
     const [hours, minutes] = effectiveWorkStartTime.split(':').map(Number);
-    
+
     const workStartToday = new Date(now);
     workStartToday.setHours(hours, minutes, 0, 0);
 
@@ -274,7 +274,7 @@ const Dashboard = () => {
 
   // For status card - show lateness from existing record
   const { isLate, lateMinutes } = calculateLateness(false);
-  
+
   // For camera preview - check current time lateness
   const currentTimeLateness = calculateLateness(true);
 
@@ -310,19 +310,19 @@ const Dashboard = () => {
     const byteArray = new Uint8Array(byteNumbers);
     const blob = new Blob([byteArray], { type: 'image/jpeg' });
     const fileName = `${user?.id}/${Date.now()}_${recordType}.jpg`;
-    
+
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         const { error } = await supabase.storage
           .from('attendance-photos')
           .upload(fileName, blob, { contentType: 'image/jpeg' });
-        
+
         if (error) throw error;
-        
+
         const { data: urlData } = supabase.storage
           .from('attendance-photos')
           .getPublicUrl(fileName);
-        
+
         return urlData.publicUrl;
       } catch (err) {
         console.error(`Photo upload attempt ${attempt + 1} failed:`, err);
@@ -447,11 +447,11 @@ const Dashboard = () => {
   const distanceToOffice =
     currentPosition && company?.office_latitude && company?.office_longitude
       ? calculateDistance(
-          currentPosition.latitude,
-          currentPosition.longitude,
-          company.office_latitude,
-          company.office_longitude
-        )
+        currentPosition.latitude,
+        currentPosition.longitude,
+        company.office_latitude,
+        company.office_longitude
+      )
       : null;
 
   const isWithinGeofence =
@@ -489,8 +489,8 @@ const Dashboard = () => {
     <AppLayout>
       <div className="container mx-auto max-w-2xl px-4 py-6">
         <div className="space-y-6">
-          {/* Warning if no company assigned */}
-          {showCompanyWarning && (
+          {/* Warning if no company assigned - REMOVED AS REQUESTED */}
+          {/* {showCompanyWarning && (
             <Card className="border-2 border-warning bg-warning/5">
               <CardContent className="py-4">
                 <div className="flex items-start gap-3">
@@ -504,7 +504,7 @@ const Dashboard = () => {
                 </div>
               </CardContent>
             </Card>
-          )}
+          )} */}
 
           {/* Status Card */}
           <StatusCard
@@ -555,7 +555,7 @@ const Dashboard = () => {
                   <div>
                     <p className="font-medium text-destructive">Di Luar Jangkauan Kantor</p>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Anda berada {Math.round(distanceToOffice)}m dari kantor. 
+                      Anda berada {Math.round(distanceToOffice)}m dari kantor.
                       Maksimal {company?.radius_meters || 100}m untuk bisa absen.
                     </p>
                   </div>
@@ -621,17 +621,17 @@ const Dashboard = () => {
                       {locationLoading
                         ? 'Mendapatkan lokasi...'
                         : locationError
-                        ? 'Lokasi Error'
-                        : currentPosition
-                        ? 'Lokasi Tersedia'
-                        : 'Lokasi Belum Tersedia'}
+                          ? 'Lokasi Error'
+                          : currentPosition
+                            ? 'Lokasi Tersedia'
+                            : 'Lokasi Belum Tersedia'}
                     </p>
                     <p className="text-sm text-muted-foreground">
                       {locationError
                         ? locationError
                         : currentPosition
-                        ? `Akurasi: ±${Math.round(currentPosition.accuracy)}m`
-                        : 'Klik tombol Update Lokasi'}
+                          ? `Akurasi: ±${Math.round(currentPosition.accuracy)}m`
+                          : 'Klik tombol Update Lokasi'}
                     </p>
                   </div>
 
@@ -707,9 +707,9 @@ const Dashboard = () => {
             employeeName={profile?.full_name || user?.email || 'Employee'}
             recordType={
               pendingRecordType === 'clock_in' ? 'CLOCK IN' :
-              pendingRecordType === 'clock_out' ? 'CLOCK OUT' :
-              pendingRecordType === 'break_out' ? 'ISTIRAHAT KELUAR' :
-              pendingRecordType === 'break_in' ? 'KEMBALI ISTIRAHAT' : 'ABSENSI'
+                pendingRecordType === 'clock_out' ? 'CLOCK OUT' :
+                  pendingRecordType === 'break_out' ? 'ISTIRAHAT KELUAR' :
+                    pendingRecordType === 'break_in' ? 'KEMBALI ISTIRAHAT' : 'ABSENSI'
             }
             latitude={currentPosition.latitude}
             longitude={currentPosition.longitude}

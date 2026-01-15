@@ -33,10 +33,10 @@ import {
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { 
-  Users, Search, MapPin, MapPinOff, Edit, UserPlus, Shield, ShieldCheck, 
+import {
+  Users, Search, MapPin, MapPinOff, Edit, UserPlus, Shield, ShieldCheck,
   Code, Briefcase, HardHat, Clock, Filter, CheckCircle2, XCircle, Building2,
-  Download, Upload, AlertTriangle
+  Download, Upload, AlertTriangle, Trash
 } from 'lucide-react';
 import { ImportEmployees } from '@/components/employees/ImportEmployees';
 import { toast } from 'sonner';
@@ -84,7 +84,7 @@ const AdminEmployees = () => {
   const [filterDepartment, setFilterDepartment] = useState<string>('all');
   const [filterShift, setFilterShift] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
-  
+
   const [editingEmployee, setEditingEmployee] = useState<Profile | null>(null);
   const [editRequiresGeofence, setEditRequiresGeofence] = useState(true);
   const [editEmployeeType, setEditEmployeeType] = useState<'office' | 'field'>('office');
@@ -92,7 +92,7 @@ const AdminEmployees = () => {
   const [editDepartment, setEditDepartment] = useState('');
   const [editShiftId, setEditShiftId] = useState<string>('');
   const [editIsActive, setEditIsActive] = useState(true);
-  
+
   // Add employee form state
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newPassword, setNewPassword] = useState('');
@@ -113,7 +113,7 @@ const AdminEmployees = () => {
         .select('role')
         .eq('user_id', user.id)
         .maybeSingle();
-      
+
       if (error) throw error;
       return data?.role as string;
     },
@@ -132,7 +132,7 @@ const AdminEmployees = () => {
         .select('*')
         .eq('is_active', true)
         .order('name');
-      
+
       if (error) throw error;
       return data as Shift[];
     },
@@ -173,7 +173,7 @@ const AdminEmployees = () => {
     }) => {
       const { error } = await supabase
         .from('profiles')
-        .update({ 
+        .update({
           requires_geofence: updates.requiresGeofence,
           employee_type: updates.employeeType,
           job_title: updates.jobTitle || null,
@@ -182,7 +182,7 @@ const AdminEmployees = () => {
           is_active: updates.isActive,
         })
         .eq('user_id', updates.userId);
-      
+
       if (error) throw error;
     },
     onSuccess: () => {
@@ -220,7 +220,7 @@ const AdminEmployees = () => {
 
   // Helper function to wait and retry profile update
   const updateProfileWithRetry = async (
-    userId: string, 
+    userId: string,
     updates: { job_title?: string | null; department?: string | null; shift_id?: string | null },
     maxRetries = 3,
     delayMs = 500
@@ -228,14 +228,14 @@ const AdminEmployees = () => {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       // Wait before attempting (give trigger time to create profile)
       await new Promise(resolve => setTimeout(resolve, delayMs * (attempt + 1)));
-      
+
       const { error } = await supabase
         .from('profiles')
         .update(updates)
         .eq('user_id', userId);
-      
+
       if (!error) return true;
-      
+
       console.log(`Profile update attempt ${attempt + 1} failed, retrying...`);
     }
     return false;
@@ -315,6 +315,29 @@ const AdminEmployees = () => {
     }
   };
 
+  // Delete user handler
+  const handleDeleteUser = async (userId: string, userName: string) => {
+    if (!confirm(`Apakah Anda yakin ingin MENGHAPUS user "${userName}"?\n\nTindakan ini PERMANEN dan akan menghapus semua data profil dan history absensi user ini.`)) {
+      return;
+    }
+
+    const toastId = toast.loading('Menghapus user...');
+    try {
+      const { data, error } = await supabase.functions.invoke('delete-user', {
+        body: { userId },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      toast.success(`User "${userName}" berhasil dihapus`, { id: toastId });
+      queryClient.invalidateQueries({ queryKey: ['admin-employees'] });
+    } catch (error: any) {
+      console.error('Delete user error:', error);
+      toast.error(error.message || 'Gagal menghapus user', { id: toastId });
+    }
+  };
+
   const resetAddForm = () => {
     setNewPassword('');
     setNewFullName('');
@@ -329,24 +352,24 @@ const AdminEmployees = () => {
     // Search filter
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      const matchesSearch = 
+      const matchesSearch =
         emp.full_name.toLowerCase().includes(term) ||
         emp.email.toLowerCase().includes(term) ||
         (emp.job_title?.toLowerCase().includes(term) ?? false) ||
         (emp.department?.toLowerCase().includes(term) ?? false);
       if (!matchesSearch) return false;
     }
-    
+
     // Department filter
     if (filterDepartment !== 'all' && emp.department !== filterDepartment) return false;
-    
+
     // Shift filter
     if (filterShift !== 'all' && emp.shift_id !== filterShift) return false;
-    
+
     // Status filter
     if (filterStatus === 'active' && !emp.is_active) return false;
     if (filterStatus === 'inactive' && emp.is_active) return false;
-    
+
     return true;
   });
 
@@ -454,8 +477,8 @@ const AdminEmployees = () => {
             <p className="text-muted-foreground">Kelola daftar karyawan, shift, dan pengaturan absensi</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <ImportEmployees 
-              shifts={shifts || []} 
+            <ImportEmployees
+              shifts={shifts || []}
               isDeveloper={isDeveloper}
               onSuccess={() => refetchEmployees()}
             />
@@ -722,6 +745,15 @@ const AdminEmployees = () => {
                             <Edit className="h-4 w-4 mr-1" />
                             Edit
                           </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive/90 hover:bg-destructive/10"
+                            onClick={() => handleDeleteUser(employee.user_id, employee.full_name)}
+                          >
+                            <Trash className="h-4 w-4 mr-1" />
+                            Hapus
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))
@@ -822,7 +854,7 @@ const AdminEmployees = () => {
               <div className="space-y-1">
                 <Label className="text-base">Wajib Absen di Kantor</Label>
                 <p className="text-sm text-muted-foreground">
-                  {editRequiresGeofence 
+                  {editRequiresGeofence
                     ? 'Harus dalam radius kantor untuk absen'
                     : 'Bisa absen dari mana saja'}
                 </p>
@@ -834,28 +866,28 @@ const AdminEmployees = () => {
             </div>
 
             {/* Warning for inconsistent configuration */}
-            {((editEmployeeType === 'office' && !editRequiresGeofence) || 
+            {((editEmployeeType === 'office' && !editRequiresGeofence) ||
               (editEmployeeType === 'field' && editRequiresGeofence)) && (
-              <div className="flex items-start gap-3 rounded-lg border-2 border-amber-500 bg-amber-50 dark:bg-amber-950/20 p-4">
-                <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
-                    Konfigurasi Tidak Konsisten
-                  </p>
-                  <p className="text-sm text-amber-600 dark:text-amber-500">
-                    {editEmployeeType === 'office' && !editRequiresGeofence 
-                      ? 'Karyawan Kantoran biasanya wajib absen di kantor (geofence aktif).'
-                      : 'Karyawan Lapangan biasanya tidak wajib absen di kantor (geofence non-aktif).'}
-                  </p>
+                <div className="flex items-start gap-3 rounded-lg border-2 border-amber-500 bg-amber-50 dark:bg-amber-950/20 p-4">
+                  <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
+                      Konfigurasi Tidak Konsisten
+                    </p>
+                    <p className="text-sm text-amber-600 dark:text-amber-500">
+                      {editEmployeeType === 'office' && !editRequiresGeofence
+                        ? 'Karyawan Kantoran biasanya wajib absen di kantor (geofence aktif).'
+                        : 'Karyawan Lapangan biasanya tidak wajib absen di kantor (geofence non-aktif).'}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
             <div className="flex items-center justify-between rounded-lg border-2 border-foreground p-4">
               <div className="space-y-1">
                 <Label className="text-base">Status Aktif</Label>
                 <p className="text-sm text-muted-foreground">
-                  {editIsActive 
+                  {editIsActive
                     ? 'Karyawan aktif dan bisa melakukan absensi'
                     : 'Karyawan non-aktif, tidak bisa absen'}
                 </p>
@@ -884,7 +916,7 @@ const AdminEmployees = () => {
           <DialogHeader>
             <DialogTitle>Tambah User Baru</DialogTitle>
             <DialogDescription>
-              {isDeveloper 
+              {isDeveloper
                 ? 'Sebagai Developer, Anda bisa menambahkan Admin atau Karyawan'
                 : 'Sebagai Admin, Anda hanya bisa menambahkan Karyawan'}
             </DialogDescription>

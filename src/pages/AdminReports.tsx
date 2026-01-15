@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { downloadBlob } from '@/lib/download';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -24,14 +25,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { 
-  Download, FileSpreadsheet, Calendar, Users, Clock, 
+import {
+  Download, FileSpreadsheet, Calendar, Users, Clock,
   AlertTriangle, XCircle, LogOut as EarlyLeaveIcon, Loader2,
   Coffee
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, parseISO, differenceInMinutes, isWeekend, startOfWeek, endOfWeek, subWeeks, addWeeks
- } from 'date-fns';
+import {
+  format, startOfMonth, endOfMonth, eachDayOfInterval, parseISO, differenceInMinutes, isWeekend, startOfWeek, endOfWeek, subWeeks, addWeeks
+} from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
 
@@ -359,8 +361,8 @@ const AdminReports = () => {
     const holidayDates = new Set(holidays?.map(h => h.date) || []);
     const result: DailyDetail[] = [];
 
-    const filteredEmployees = selectedEmployee === 'all' 
-      ? employees 
+    const filteredEmployees = selectedEmployee === 'all'
+      ? employees
       : employees.filter(e => e.user_id === selectedEmployee);
 
     filteredEmployees.forEach((emp) => {
@@ -494,7 +496,7 @@ const AdminReports = () => {
       totalAbsentDays: recapData.reduce((sum, r) => sum + r.absentDays, 0),
       totalEarlyLeaveDays: recapData.reduce((sum, r) => sum + r.earlyLeaveDays, 0),
       avgLateMinutes: Math.round(
-        recapData.reduce((sum, r) => sum + r.totalLateMinutes, 0) / 
+        recapData.reduce((sum, r) => sum + r.totalLateMinutes, 0) /
         Math.max(recapData.reduce((sum, r) => sum + r.lateDays, 0), 1)
       ),
     };
@@ -519,8 +521,8 @@ const AdminReports = () => {
           [`Waktu export: ${exportDate}`],
           [],
           [
-            'Nama', 'Departemen', 'Tipe', 'Hari Kerja', 'Hadir', 'Terlambat', 
-            'Total Telat (menit)', 'Pulang Cepat', 'Total Cepat (menit)', 
+            'Nama', 'Departemen', 'Tipe', 'Hari Kerja', 'Hadir', 'Terlambat',
+            'Total Telat (menit)', 'Pulang Cepat', 'Total Cepat (menit)',
             'Alpa', 'Cuti', 'Sakit', 'Izin', 'Libur', 'Weekend'
           ],
           ...recapData.map((r) => [
@@ -569,23 +571,23 @@ const AdminReports = () => {
             d.clockOut || '-',
             d.workDuration ? `${Math.floor(d.workDuration / 60)}j ${d.workDuration % 60}m` : '-',
             d.lateMinutes > 0 ? d.lateMinutes : 0,
-            d.status === 'present' ? 'Hadir' : 
-            d.status === 'absent' ? 'Alpa' : 
-            d.status === 'leave' ? (d.leaveType === 'sakit' ? 'Sakit' : d.leaveType === 'izin' ? 'Izin' : 'Cuti') :
-            d.status === 'holiday' ? 'Libur' : 'Weekend',
+            d.status === 'present' ? 'Hadir' :
+              d.status === 'absent' ? 'Alpa' :
+                d.status === 'leave' ? (d.leaveType === 'sakit' ? 'Sakit' : d.leaveType === 'izin' ? 'Izin' : 'Cuti') :
+                  d.status === 'holiday' ? 'Libur' : 'Weekend',
           ]),
         ];
 
         const ws = XLSX.utils.aoa_to_sheet(wsData);
         ws['!cols'] = [
-          { wch: 12 }, { wch: 25 }, { wch: 15 }, { wch: 12 }, { wch: 15 }, 
+          { wch: 12 }, { wch: 25 }, { wch: 15 }, { wch: 12 }, { wch: 15 },
           { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 10 },
         ];
         XLSX.utils.book_append_sheet(wb, ws, 'Detail Harian');
       }
 
-      const fileName = reportType === 'monthly' 
-        ? `Rekap_Kehadiran_${selectedMonth}` 
+      const fileName = reportType === 'monthly'
+        ? `Rekap_Kehadiran_${selectedMonth}`
         : `Detail_Kehadiran_${selectedMonth}`;
 
       // Log audit
@@ -606,7 +608,11 @@ const AdminReports = () => {
         p_user_agent: navigator.userAgent,
       });
 
-      XLSX.writeFile(wb, `${fileName}.xlsx`);
+      // Robust download handling with custom utility
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      downloadBlob(blob, `${fileName}.xlsx`);
+
       toast.success(`Laporan diekspor: ${fileName}.xlsx`);
     } catch (error) {
       console.error('Export error:', error);
@@ -655,8 +661,8 @@ const AdminReports = () => {
                 Generate laporan kehadiran otomatis (telat, pulang cepat, alpa)
               </p>
             </div>
-            <Button 
-              onClick={exportToXLSX} 
+            <Button
+              onClick={exportToXLSX}
               disabled={(reportType === 'monthly' ? !recapData.length : !dailyDetailData.length) || isExporting}
               className="border-2 border-foreground"
             >
