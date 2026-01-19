@@ -102,20 +102,20 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar">
       {/* Header - Logo & Toggle */}
-      <SidebarHeader className={cn("border-b border-sidebar-border", isCollapsed ? "p-2" : "p-4")}>
-        <div className={cn("flex items-center", isCollapsed ? "flex-col gap-2" : "justify-between")}>
+      <SidebarHeader className={cn("border-b border-sidebar-border", isCollapsed ? "px-1 py-3" : "p-4")}>
+        <div className={cn("flex items-center", isCollapsed ? "flex-col gap-1" : "justify-between")}>
           {isCollapsed ? (
             <>
               {/* Collapsed: Show icon centered */}
-              <Link to="/" className="flex items-center justify-center">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-sidebar-foreground shrink-0">
-                  <Clock className="h-5 w-5 text-sidebar-foreground" />
+              <Link to="/" className="flex items-center justify-center p-1">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-sidebar-foreground shrink-0">
+                  <Clock className="h-4 w-4 text-sidebar-foreground" />
                 </div>
               </Link>
               {/* Expand button below icon */}
               <button
                 onClick={toggleSidebar}
-                className="hidden md:flex p-1.5 text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 rounded-md transition-colors"
+                className="hidden md:flex p-1 text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 rounded-md transition-colors"
                 title="Expand sidebar"
               >
                 <PanelLeft className="h-4 w-4" />
@@ -143,11 +143,11 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="px-2 py-4">
+      <SidebarContent className={cn(isCollapsed ? "px-1 py-2" : "px-2 py-4")}>
         {/* User Menu */}
-        <SidebarGroup>
+        <SidebarGroup className={cn(isCollapsed && "p-0")}>
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className={cn(isCollapsed && "gap-0.5")}>
               {userMenuItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
@@ -155,14 +155,17 @@ export function AppSidebar() {
                     isActive={isActive(item.url)}
                     tooltip={item.title}
                     className={cn(
-                      'w-full justify-start gap-3 px-3 py-2.5 rounded-md transition-colors',
+                      'w-full rounded-md transition-colors',
+                      isCollapsed 
+                        ? 'justify-center p-2' 
+                        : 'justify-start gap-3 px-3 py-2.5',
                       isActive(item.url)
                         ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
                         : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
                     )}
                   >
-                    <Link to={item.url}>
-                      <item.icon className="h-5 w-5 shrink-0" />
+                    <Link to={item.url} className={cn(isCollapsed && "flex justify-center")}>
+                      <item.icon className={cn("shrink-0", isCollapsed ? "h-4 w-4" : "h-5 w-5")} />
                       {!isCollapsed && <span>{item.title}</span>}
                     </Link>
                   </SidebarMenuButton>
@@ -172,16 +175,21 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
+        {/* Separator for collapsed admin section */}
+        {isAdminOrDeveloper && isCollapsed && (
+          <div className="my-2 mx-1 border-t border-sidebar-border" />
+        )}
+
         {/* Admin Menu */}
         {isAdminOrDeveloper && (
-          <SidebarGroup className="mt-4">
+          <SidebarGroup className={cn(isCollapsed ? "p-0" : "mt-4")}>
             {!isCollapsed && (
               <SidebarGroupLabel className="px-3 text-xs font-semibold text-sidebar-foreground/50 uppercase tracking-wider">
                 Admin
               </SidebarGroupLabel>
             )}
             <SidebarGroupContent>
-              <SidebarMenu>
+              <SidebarMenu className={cn(isCollapsed && "gap-0.5")}>
                 {adminMenuItems.map((item) => (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
@@ -189,14 +197,17 @@ export function AppSidebar() {
                       isActive={isActive(item.url)}
                       tooltip={item.title}
                       className={cn(
-                        'w-full justify-start gap-3 px-3 py-2.5 rounded-md transition-colors',
+                        'w-full rounded-md transition-colors',
+                        isCollapsed 
+                          ? 'justify-center p-2' 
+                          : 'justify-start gap-3 px-3 py-2.5',
                         isActive(item.url)
                           ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
                           : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
                       )}
                     >
-                      <Link to={item.url}>
-                        <item.icon className="h-5 w-5 shrink-0" />
+                      <Link to={item.url} className={cn(isCollapsed && "flex justify-center")}>
+                        <item.icon className={cn("shrink-0", isCollapsed ? "h-4 w-4" : "h-5 w-5")} />
                         {!isCollapsed && <span>{item.title}</span>}
                       </Link>
                     </SidebarMenuButton>
@@ -209,7 +220,7 @@ export function AppSidebar() {
       </SidebarContent>
 
       {/* Footer - User Profile */}
-      <SidebarFooter className="p-4 border-t border-sidebar-border">
+      <SidebarFooter className={cn("border-t border-sidebar-border", isCollapsed ? "p-2" : "p-4")}>
         <div className={cn("flex items-center", isCollapsed ? "justify-center" : "justify-between")}>
           {isCollapsed ? (
             <button
@@ -217,7 +228,7 @@ export function AppSidebar() {
               className="p-2 text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 rounded-md transition-colors"
               title="Sign Out"
             >
-              <LogOut className="h-5 w-5" />
+              <LogOut className="h-4 w-4" />
             </button>
           ) : (
             <>
