@@ -57,6 +57,8 @@ interface Employee {
   department: string | null;
   employee_type: 'office' | 'field';
   attendance_required: boolean;
+  base_salary: number | null;
+  salary_type: 'daily' | 'monthly' | null;
   shifts: {
     name: string;
     start_time: string;
@@ -106,6 +108,8 @@ interface CompanySettings {
 
 interface PayrollData {
   employee: Employee;
+  baseSalary: number;
+  monthlySalary: number;
   workingDays: number;
   presentDays: number;
   absentDays: number;
@@ -131,6 +135,7 @@ interface PayrollData {
   // Totals
   totalDeductions: number;
   totalAdditions: number;
+  netSalary: number;
 }
 
 const PTKP_OPTIONS = Object.keys(PTKP_VALUES);
@@ -144,7 +149,6 @@ const AdminPayroll = () => {
   // Feature toggles for this session (preview)
   const [showBpjs, setShowBpjs] = useState(false);
   const [showPph21, setShowPph21] = useState(false);
-  const [baseSalary, setBaseSalary] = useState(5000000); // Default base salary for simulation
   const [ptkpStatus, setPtkpStatus] = useState('TK/0');
   const [detailOpen, setDetailOpen] = useState(false);
 
@@ -204,6 +208,7 @@ const AdminPayroll = () => {
         .from('profiles')
         .select(`
           id, user_id, full_name, email, department, employee_type, attendance_required,
+          base_salary, salary_type,
           shifts (name, start_time, end_time)
         `)
         .eq('is_active', true)
@@ -404,14 +409,22 @@ const AdminPayroll = () => {
       const earlyLeaveDeduction = Math.max(0, totalEarlyLeaveMinutes) * earlyLeaveDeductionPerMinute;
       const overtimeAmount = Math.round(overtimeHours * 10) / 10 * overtimeRatePerHour;
 
+      // Calculate employee salary
+      const empBaseSalary = emp.base_salary || 0;
+      const empSalaryType = emp.salary_type || 'monthly';
+      // If daily, convert to monthly based on working days
+      const monthlySalary = empSalaryType === 'daily' 
+        ? empBaseSalary * workingDays 
+        : empBaseSalary;
+
       // Calculate BPJS (optional)
       let bpjsKesehatanEmployee = 0;
       let bpjsJhtEmployee = 0;
       let bpjsJpEmployee = 0;
       let totalBpjsEmployee = 0;
 
-      if (showBpjs) {
-        const bpjs = calculateBPJS(baseSalary, bpjsRates);
+      if (showBpjs && monthlySalary > 0) {
+        const bpjs = calculateBPJS(monthlySalary, bpjsRates);
         bpjsKesehatanEmployee = bpjs.employee.kesehatan;
         bpjsJhtEmployee = bpjs.employee.jht;
         bpjsJpEmployee = bpjs.employee.jp;
@@ -420,15 +433,18 @@ const AdminPayroll = () => {
 
       // Calculate PPh 21 (optional)
       let pph21 = 0;
-      if (showPph21) {
-        pph21 = calculatePPh21Monthly(baseSalary, ptkpStatus);
+      if (showPph21 && monthlySalary > 0) {
+        pph21 = calculatePPh21Monthly(monthlySalary, ptkpStatus);
       }
 
       const totalDeductions = lateDeduction + earlyLeaveDeduction + totalBpjsEmployee + pph21;
       const totalAdditions = overtimeAmount;
+      const netSalary = monthlySalary + totalAdditions - totalDeductions;
 
       return {
         employee: emp,
+        baseSalary: empBaseSalary,
+        monthlySalary,
         workingDays,
         presentDays,
         absentDays,
@@ -451,9 +467,10 @@ const AdminPayroll = () => {
         pph21,
         totalDeductions,
         totalAdditions,
+        netSalary,
       };
     });
-  }, [employees, dateRange, attendance, leaves, holidays, company, showBpjs, showPph21, baseSalary, ptkpStatus, bpjsRates]);
+  }, [employees, dateRange, attendance, leaves, holidays, company, showBpjs, showPph21, ptkpStatus, bpjsRates]);
 
   // Export to Excel (Payroll Format)
   const exportPayrollXLSX = async () => {
@@ -468,6 +485,7 @@ const AdminPayroll = () => {
       // Build dynamic headers based on options
       const headers = [
         'No', 'Nama Karyawan', 'Departemen', 'Tipe',
+        'Gaji Pokok', 'Tipe Gaji', 'Gaji Bulanan',
         'Hari Kerja', 'Hadir', 'Alpa',
         'Telat (hari)', 'Telat (menit)', 'Potongan Telat',
         'Pulang Awal (hari)', 'Pulang Awal (menit)', 'Potongan Pulang Awal',
@@ -483,7 +501,7 @@ const AdminPayroll = () => {
         headers.push('PPh 21');
       }
 
-      headers.push('Total Potongan', 'Total Tambahan');
+      headers.push('Total Potongan', 'Total Tambahan', 'Gaji Bersih');
 
       const wsData = [
         [`Data Payroll - GeoAttend`],
@@ -495,7 +513,7 @@ const AdminPayroll = () => {
         [`- Potongan telat: ${formatCurrency(company?.late_penalty_per_minute || 0)}/menit (setelah toleransi ${company?.grace_period_minutes || 0} menit)`],
         [`- Potongan pulang awal: ${formatCurrency(company?.early_leave_deduction_per_minute || 0)}/menit`],
         [`- Uang lembur: ${formatCurrency(company?.overtime_rate_per_hour || 0)}/jam`],
-        showBpjs ? [`- BPJS aktif dengan gaji simulasi: ${formatCurrency(baseSalary)}`] : [],
+        showBpjs ? [`- BPJS aktif (dihitung dari gaji per karyawan)`] : [],
         showPph21 ? [`- PPh 21 aktif dengan status PTKP: ${ptkpStatus}`] : [],
         [],
         headers,
@@ -505,6 +523,9 @@ const AdminPayroll = () => {
             r.employee.full_name,
             r.employee.department || '-',
             r.employee.employee_type === 'office' ? 'Kantor' : 'Lapangan',
+            r.baseSalary,
+            r.employee.salary_type === 'daily' ? 'Harian' : 'Bulanan',
+            r.monthlySalary,
             r.workingDays,
             r.presentDays,
             r.absentDays,
@@ -530,7 +551,7 @@ const AdminPayroll = () => {
             row.push(r.pph21);
           }
 
-          row.push(r.totalDeductions, r.totalAdditions);
+          row.push(r.totalDeductions, r.totalAdditions, r.netSalary);
           return row;
         }),
         [],
@@ -538,6 +559,9 @@ const AdminPayroll = () => {
         (() => {
           const totalsRow: (string | number)[] = [
             '', '', '', 'TOTAL',
+            payrollData.reduce((s, r) => s + r.baseSalary, 0),
+            '',
+            payrollData.reduce((s, r) => s + r.monthlySalary, 0),
             payrollData.reduce((s, r) => s + r.workingDays, 0),
             payrollData.reduce((s, r) => s + r.presentDays, 0),
             payrollData.reduce((s, r) => s + r.absentDays, 0),
@@ -570,7 +594,8 @@ const AdminPayroll = () => {
 
           totalsRow.push(
             payrollData.reduce((s, r) => s + r.totalDeductions, 0),
-            payrollData.reduce((s, r) => s + r.totalAdditions, 0)
+            payrollData.reduce((s, r) => s + r.totalAdditions, 0),
+            payrollData.reduce((s, r) => s + r.netSalary, 0)
           );
           return totalsRow;
         })(),
@@ -772,21 +797,12 @@ const AdminPayroll = () => {
                   {(showBpjs || showPph21) && (
                     <div className="p-4 rounded-lg border-2 border-primary/50 bg-primary/5 space-y-4">
                       <p className="text-sm font-medium text-primary">
-                        Simulasi Perhitungan (gaji sama untuk semua karyawan)
+                        Perhitungan berdasarkan gaji per karyawan
                       </p>
                       <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-2">
-                          <Label>Gaji Pokok (Rp)</Label>
-                          <Input
-                            type="number"
-                            value={baseSalary}
-                            onChange={(e) => setBaseSalary(Number(e.target.value))}
-                            className="border-2 border-foreground"
-                          />
-                        </div>
                         {showPph21 && (
                           <div className="space-y-2">
-                            <Label>Status PTKP</Label>
+                            <Label>Status PTKP Default</Label>
                             <Select value={ptkpStatus} onValueChange={setPtkpStatus}>
                               <SelectTrigger className="border-2 border-foreground">
                                 <SelectValue />
@@ -803,7 +819,7 @@ const AdminPayroll = () => {
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        * Untuk perhitungan riil, integrasikan dengan sistem HR yang menyimpan gaji per karyawan.
+                        * Gaji pokok diatur di halaman Karyawan. Karyawan tanpa gaji akan menampilkan Rp 0.
                       </p>
                     </div>
                   )}
@@ -948,15 +964,16 @@ const AdminPayroll = () => {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Nama</TableHead>
+                        <TableHead className="text-right">Gaji Pokok</TableHead>
                         <TableHead className="text-center">Hadir</TableHead>
                         <TableHead className="text-center">Alpa</TableHead>
                         <TableHead className="text-center">Telat</TableHead>
                         <TableHead className="text-right">Pot. Telat</TableHead>
-                        <TableHead className="text-center">Jam Kerja</TableHead>
                         <TableHead className="text-center">Lembur</TableHead>
                         {showBpjs && <TableHead className="text-right">BPJS</TableHead>}
                         {showPph21 && <TableHead className="text-right">PPh 21</TableHead>}
                         <TableHead className="text-right">Total Pot.</TableHead>
+                        <TableHead className="text-right">Gaji Bersih</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -967,8 +984,16 @@ const AdminPayroll = () => {
                               <p>{r.employee.full_name}</p>
                               <p className="text-xs text-muted-foreground">
                                 {r.employee.employee_type === 'office' ? 'Kantor' : 'Lapangan'}
+                                {r.employee.salary_type === 'daily' && ' • Harian'}
                               </p>
                             </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {r.monthlySalary > 0 ? (
+                              <span className="font-medium">{formatCurrency(r.monthlySalary)}</span>
+                            ) : (
+                              <span className="text-muted-foreground">Belum diatur</span>
+                            )}
                           </TableCell>
                           <TableCell className="text-center">
                             <Badge variant="default">{r.presentDays}/{r.workingDays}</Badge>
@@ -998,7 +1023,6 @@ const AdminPayroll = () => {
                               <span className="text-muted-foreground">-</span>
                             )}
                           </TableCell>
-                          <TableCell className="text-center">{r.totalWorkHours}j</TableCell>
                           <TableCell className="text-center">
                             {r.overtimeHours > 0 ? (
                               <Badge variant="outline" className="bg-green-50 text-green-700">
@@ -1026,6 +1050,11 @@ const AdminPayroll = () => {
                             ) : (
                               <span className="text-muted-foreground">-</span>
                             )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span className="font-bold text-green-600">
+                              {formatCurrency(r.netSalary)}
+                            </span>
                           </TableCell>
                         </TableRow>
                       ))}

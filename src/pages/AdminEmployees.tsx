@@ -74,6 +74,8 @@ interface Profile {
   shift_id: string | null;
   shift?: Shift | null;
   attendance_required: boolean;
+  base_salary: number | null;
+  salary_type: 'daily' | 'monthly' | null;
 }
 
 const AdminEmployees = () => {
@@ -94,6 +96,8 @@ const AdminEmployees = () => {
   const [editShiftId, setEditShiftId] = useState<string>('');
   const [editIsActive, setEditIsActive] = useState(true);
   const [editAttendanceRequired, setEditAttendanceRequired] = useState(true);
+  const [editBaseSalary, setEditBaseSalary] = useState<number>(0);
+  const [editSalaryType, setEditSalaryType] = useState<'daily' | 'monthly'>('monthly');
 
   // Add employee form state
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -173,6 +177,8 @@ const AdminEmployees = () => {
       shiftId: string | null;
       isActive: boolean;
       attendanceRequired: boolean;
+      baseSalary: number;
+      salaryType: 'daily' | 'monthly';
     }) => {
       const { error } = await supabase
         .from('profiles')
@@ -184,6 +190,8 @@ const AdminEmployees = () => {
           shift_id: updates.shiftId || null,
           is_active: updates.isActive,
           attendance_required: updates.attendanceRequired,
+          base_salary: updates.baseSalary || 0,
+          salary_type: updates.salaryType,
         })
         .eq('user_id', updates.userId);
 
@@ -193,6 +201,7 @@ const AdminEmployees = () => {
       queryClient.invalidateQueries({ queryKey: ['admin-employees'] });
       // Ensure any open pages (Dashboard/Clock/Profile) refresh the updated employee type
       queryClient.invalidateQueries({ queryKey: ['profile', variables.userId] });
+      queryClient.invalidateQueries({ queryKey: ['payroll-employees'] });
       toast.success('Data karyawan berhasil diperbarui!');
       setEditingEmployee(null);
     },
@@ -210,6 +219,8 @@ const AdminEmployees = () => {
     setEditShiftId(employee.shift_id || '');
     setEditIsActive(employee.is_active);
     setEditAttendanceRequired(employee.attendance_required ?? true);
+    setEditBaseSalary(employee.base_salary || 0);
+    setEditSalaryType(employee.salary_type || 'monthly');
   };
 
   const handleSaveEdit = () => {
@@ -223,6 +234,8 @@ const AdminEmployees = () => {
       shiftId: editShiftId === 'none' ? null : editShiftId || null,
       isActive: editIsActive,
       attendanceRequired: editAttendanceRequired,
+      baseSalary: editBaseSalary,
+      salaryType: editSalaryType,
     });
   };
 
@@ -833,6 +846,33 @@ const AdminEmployees = () => {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Salary Configuration */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-base-salary">Gaji Pokok</Label>
+                <Input
+                  id="edit-base-salary"
+                  type="number"
+                  value={editBaseSalary}
+                  onChange={(e) => setEditBaseSalary(Number(e.target.value) || 0)}
+                  placeholder="Contoh: 5000000"
+                  className="border-2 border-foreground"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Tipe Gaji</Label>
+                <Select value={editSalaryType} onValueChange={(v) => setEditSalaryType(v as 'daily' | 'monthly')}>
+                  <SelectTrigger className="border-2 border-foreground">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="monthly">Per Bulan</SelectItem>
+                    <SelectItem value="daily">Per Hari</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="space-y-2">
