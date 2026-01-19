@@ -12,7 +12,7 @@ import LocationMap from '@/components/attendance/LocationMap';
 import GoogleMapsLink from '@/components/GoogleMapsLink';
 import { getCurrentPosition, GeolocationError, calculateDistance } from '@/lib/geolocation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { MapPin, RefreshCw, ExternalLink, AlertTriangle } from 'lucide-react';
+import { MapPin, RefreshCw, ExternalLink, AlertTriangle, CheckCircle, UserCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
@@ -40,6 +40,7 @@ interface ProfileData {
   employee_type: 'office' | 'field';
   shift_id: string | null;
   shift?: ShiftData | null;
+  attendance_required: boolean;
 }
 
 interface CompanySettings {
@@ -82,6 +83,7 @@ const Dashboard = () => {
           company_id, 
           employee_type, 
           shift_id,
+          attendance_required,
           shift:shifts(id, name, start_time, end_time, working_days)
         `)
         .eq('user_id', user.id)
@@ -492,37 +494,41 @@ const Dashboard = () => {
     <AppLayout>
       <div className="container mx-auto max-w-2xl px-4 py-6">
         <div className="space-y-6">
-          {/* Warning if no company assigned - REMOVED AS REQUESTED */}
-          {/* {showCompanyWarning && (
-            <Card className="border-2 border-warning bg-warning/5">
-              <CardContent className="py-4">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
+          {/* Special message for users who don't require attendance */}
+          {profile && !profile.attendance_required && (
+            <Card className="border-2 border-primary bg-primary/5">
+              <CardContent className="py-6">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 rounded-full bg-primary/10 shrink-0">
+                    <UserCheck className="h-6 w-6 text-primary" />
+                  </div>
                   <div>
-                    <p className="font-medium">Belum Terdaftar di Perusahaan</p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Akun Anda belum terhubung ke perusahaan. Hubungi Admin untuk didaftarkan.
+                    <h3 className="text-lg font-bold">Tidak Perlu Absen</h3>
+                    <p className="text-muted-foreground mt-1">
+                      Akun Anda dikonfigurasi sebagai akun yang tidak memerlukan absensi harian.
                     </p>
                   </div>
                 </div>
               </CardContent>
             </Card>
-          )} */}
+          )}
 
-          {/* Status Card */}
-          <StatusCard
-            status={status}
-            lastClockIn={todayLastClockIn ? new Date(todayLastClockIn.recorded_at) : null}
-            lastClockOut={todayLastClockOut ? new Date(todayLastClockOut.recorded_at) : null}
-            isLate={isLate}
-            lateMinutes={lateMinutes}
-            workStartTime={effectiveWorkStartTime}
-            employeeType={profile?.employee_type || 'office'}
-            shiftName={profile?.shift?.name}
-          />
+          {/* Status Card - only show if attendance is required */}
+          {profile?.attendance_required !== false && (
+            <StatusCard
+              status={status}
+              lastClockIn={todayLastClockIn ? new Date(todayLastClockIn.recorded_at) : null}
+              lastClockOut={todayLastClockOut ? new Date(todayLastClockOut.recorded_at) : null}
+              isLate={isLate}
+              lateMinutes={lateMinutes}
+              workStartTime={effectiveWorkStartTime}
+              employeeType={profile?.employee_type || 'office'}
+              shiftName={profile?.shift?.name}
+            />
+          )}
 
-          {/* Geofence Status Banner */}
-          {profile && (
+          {/* Geofence Status Banner - only show if attendance is required */}
+          {profile && profile.attendance_required !== false && (
             <Card className={profile.requires_geofence ? 'border-2 border-primary' : 'border-2 border-muted'}>
               <CardContent className="py-3">
                 <div className="flex items-center justify-between">
@@ -549,8 +555,8 @@ const Dashboard = () => {
             </Card>
           )}
 
-          {/* Warning if outside geofence */}
-          {profile?.requires_geofence && !isWithinGeofence && distanceToOffice !== null && (
+          {/* Warning if outside geofence - only show if attendance is required */}
+          {profile?.attendance_required !== false && profile?.requires_geofence && !isWithinGeofence && distanceToOffice !== null && (
             <Card className="border-2 border-destructive bg-destructive/5">
               <CardContent className="py-4">
                 <div className="flex items-start gap-3">

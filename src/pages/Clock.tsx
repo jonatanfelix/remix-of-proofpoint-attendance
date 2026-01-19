@@ -11,7 +11,7 @@ import LocationMap from '@/components/attendance/LocationMap';
 import GoogleMapsLink from '@/components/GoogleMapsLink';
 import { getCurrentPosition, GeolocationError, calculateDistance } from '@/lib/geolocation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { MapPin, RefreshCw, ExternalLink, AlertTriangle } from 'lucide-react';
+import { MapPin, RefreshCw, ExternalLink, AlertTriangle, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
@@ -39,6 +39,7 @@ interface ProfileData {
   employee_type: 'office' | 'field';
   shift_id: string | null;
   shift?: ShiftData | null;
+  attendance_required: boolean;
 }
 
 interface CompanySettings {
@@ -80,6 +81,7 @@ const Clock = () => {
           company_id, 
           employee_type, 
           shift_id,
+          attendance_required,
           shift:shifts(id, name, start_time, end_time, working_days)
         `)
         .eq('user_id', user.id)
@@ -497,6 +499,38 @@ const Clock = () => {
               <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
               <p className="text-muted-foreground">Memuat...</p>
             </div>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  // If user doesn't require attendance, show special message
+  if (profile && !profile.attendance_required) {
+    return (
+      <AppLayout>
+        <div className="container mx-auto max-w-2xl px-4 py-6">
+          <div className="space-y-6">
+            <h1 className="text-2xl font-bold">Clock In/Out</h1>
+            
+            <Card className="border-2 border-primary bg-primary/5">
+              <CardContent className="py-8">
+                <div className="flex flex-col items-center text-center gap-4">
+                  <div className="p-4 rounded-full bg-primary/10">
+                    <CheckCircle className="h-12 w-12 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold">Tidak Perlu Absen</h3>
+                    <p className="text-muted-foreground mt-2">
+                      Akun Anda dikonfigurasi sebagai akun yang tidak memerlukan absensi harian.
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Hubungi Admin jika ini adalah kesalahan.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </AppLayout>

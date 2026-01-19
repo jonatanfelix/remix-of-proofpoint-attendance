@@ -73,6 +73,7 @@ interface Profile {
   is_active: boolean;
   shift_id: string | null;
   shift?: Shift | null;
+  attendance_required: boolean;
 }
 
 const AdminEmployees = () => {
@@ -92,6 +93,7 @@ const AdminEmployees = () => {
   const [editDepartment, setEditDepartment] = useState('');
   const [editShiftId, setEditShiftId] = useState<string>('');
   const [editIsActive, setEditIsActive] = useState(true);
+  const [editAttendanceRequired, setEditAttendanceRequired] = useState(true);
 
   // Add employee form state
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -170,6 +172,7 @@ const AdminEmployees = () => {
       department: string;
       shiftId: string | null;
       isActive: boolean;
+      attendanceRequired: boolean;
     }) => {
       const { error } = await supabase
         .from('profiles')
@@ -180,6 +183,7 @@ const AdminEmployees = () => {
           department: updates.department || null,
           shift_id: updates.shiftId || null,
           is_active: updates.isActive,
+          attendance_required: updates.attendanceRequired,
         })
         .eq('user_id', updates.userId);
 
@@ -205,6 +209,7 @@ const AdminEmployees = () => {
     setEditDepartment(employee.department || '');
     setEditShiftId(employee.shift_id || '');
     setEditIsActive(employee.is_active);
+    setEditAttendanceRequired(employee.attendance_required ?? true);
   };
 
   const handleSaveEdit = () => {
@@ -217,6 +222,7 @@ const AdminEmployees = () => {
       department: editDepartment,
       shiftId: editShiftId === 'none' ? null : editShiftId || null,
       isActive: editIsActive,
+      attendanceRequired: editAttendanceRequired,
     });
   };
 
@@ -884,6 +890,22 @@ const AdminEmployees = () => {
                   </div>
                 </div>
               )}
+
+            {/* Attendance Required Toggle */}
+            <div className="flex items-center justify-between rounded-lg border-2 border-primary/50 bg-primary/5 p-4">
+              <div className="space-y-1">
+                <Label className="text-base">Wajib Absensi</Label>
+                <p className="text-sm text-muted-foreground">
+                  {editAttendanceRequired
+                    ? 'Harus clock in/out setiap hari kerja'
+                    : 'Tidak perlu absen (misal: owner, direktur)'}
+                </p>
+              </div>
+              <Switch
+                checked={editAttendanceRequired}
+                onCheckedChange={setEditAttendanceRequired}
+              />
+            </div>
 
             <div className="flex items-center justify-between rounded-lg border-2 border-foreground p-4">
               <div className="space-y-1">
