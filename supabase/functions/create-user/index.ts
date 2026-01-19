@@ -232,7 +232,23 @@ Deno.serve(async (req) => {
     console.log('User created:', newUser.id);
 
     // Update the role in user_roles table (trigger creates with 'employee' default)
-    if (newUserRole !== 'employee') {
+    // First check if user_role exists
+    const { data: existingRole } = await supabaseAdmin
+      .from('user_roles')
+      .select('id')
+      .eq('user_id', newUser.id)
+      .maybeSingle();
+
+    if (!existingRole) {
+      // Create user_role if it doesn't exist
+      const { error: insertRoleError } = await supabaseAdmin
+        .from('user_roles')
+        .insert({ user_id: newUser.id, role: newUserRole });
+
+      if (insertRoleError) {
+        console.error('Insert role error:', insertRoleError);
+      }
+    } else if (newUserRole !== 'employee') {
       const { error: updateRoleError } = await supabaseAdmin
         .from('user_roles')
         .update({ role: newUserRole })
@@ -243,24 +259,53 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Update profile with role, company_id, and username
-    const profileUpdate: { role?: string; company_id?: string; username: string } = {
-      username: username,
-    };
-    if (newUserRole !== 'employee') {
-      profileUpdate.role = newUserRole;
-    }
-    if (adminCompanyId) {
-      profileUpdate.company_id = adminCompanyId;
-    }
-
-    const { error: updateProfileError } = await supabaseAdmin
+    // Check if profile exists
+    const { data: existingProfile } = await supabaseAdmin
       .from('profiles')
-      .update(profileUpdate)
-      .eq('user_id', newUser.id);
+      .select('id')
+      .eq('user_id', newUser.id)
+      .maybeSingle();
 
-    if (updateProfileError) {
-      console.error('Update profile error:', updateProfileError);
+    if (!existingProfile) {
+      // Create profile if it doesn't exist
+      const { error: insertProfileError } = await supabaseAdmin
+        .from('profiles')
+        .insert({
+          user_id: newUser.id,
+          email: email,
+          full_name: trimmedFullName,
+          username: username,
+          role: newUserRole,
+          company_id: adminCompanyId,
+          is_active: true,
+          attendance_required: true,
+          employee_type: 'office',
+          leave_balance: 12,
+        });
+
+      if (insertProfileError) {
+        console.error('Insert profile error:', insertProfileError);
+      }
+    } else {
+      // Update profile with role, company_id, and username
+      const profileUpdate: { role?: string; company_id?: string; username: string } = {
+        username: username,
+      };
+      if (newUserRole !== 'employee') {
+        profileUpdate.role = newUserRole;
+      }
+      if (adminCompanyId) {
+        profileUpdate.company_id = adminCompanyId;
+      }
+
+      const { error: updateProfileError } = await supabaseAdmin
+        .from('profiles')
+        .update(profileUpdate)
+        .eq('user_id', newUser.id);
+
+      if (updateProfileError) {
+        console.error('Update profile error:', updateProfileError);
+      }
     }
 
     console.log('User created successfully with username:', username, 'role:', newUserRole, 'company_id:', adminCompanyId);
