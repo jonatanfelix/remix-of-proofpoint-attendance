@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Camera, X, RotateCcw } from 'lucide-react';
+import { Camera, X, RotateCcw, SwitchCamera } from 'lucide-react';
 
 interface CameraCaptureProps {
   isOpen: boolean;
@@ -32,6 +32,7 @@ const CameraCapture = ({
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -41,7 +42,7 @@ const CameraCapture = ({
     setIsReady(false);
   }, []);
 
-  const startCamera = useCallback(async () => {
+  const startCamera = useCallback(async (facing: 'user' | 'environment' = facingMode) => {
     stopCamera();
     
     setIsLoading(true);
@@ -50,7 +51,7 @@ const CameraCapture = ({
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: 'user',
+          facingMode: facing,
           width: { ideal: 1280 },
           height: { ideal: 720 },
         },
@@ -71,11 +72,17 @@ const CameraCapture = ({
       setError('Tidak dapat mengakses kamera. Silakan cek izin kamera di browser.');
       setIsLoading(false);
     }
-  }, [stopCamera]);
+  }, [stopCamera, facingMode]);
+
+  const switchCamera = useCallback(() => {
+    const newFacing = facingMode === 'user' ? 'environment' : 'user';
+    setFacingMode(newFacing);
+    startCamera(newFacing);
+  }, [facingMode, startCamera]);
 
   useEffect(() => {
     if (isOpen) {
-      startCamera();
+      startCamera(facingMode);
     } else {
       stopCamera();
     }
@@ -83,7 +90,7 @@ const CameraCapture = ({
     return () => {
       stopCamera();
     };
-  }, [isOpen, startCamera, stopCamera]);
+  }, [isOpen]);
 
   const capturePhoto = useCallback(() => {
     if (!videoRef.current || !canvasRef.current) return;
@@ -180,7 +187,7 @@ const CameraCapture = ({
           {error ? (
             <div className="text-center py-8">
               <p className="text-destructive mb-4">{error}</p>
-              <Button onClick={startCamera} variant="outline" className="border-2 border-foreground">
+              <Button onClick={() => startCamera(facingMode)} variant="outline" className="border-2 border-foreground">
                 <RotateCcw className="h-4 w-4 mr-2" />
                 Coba Lagi
               </Button>
@@ -200,17 +207,32 @@ const CameraCapture = ({
                   muted
                   className="w-full h-full object-cover"
                 />
+                
+                {/* Switch camera button */}
+                {isReady && (
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="absolute top-3 right-3 bg-background/80 hover:bg-background"
+                    onClick={switchCamera}
+                    disabled={isLoading}
+                  >
+                    <SwitchCamera className="h-5 w-5" />
+                  </Button>
+                )}
               </div>
 
-              <Button
-                onClick={capturePhoto}
-                className="w-full"
-                size="lg"
-                disabled={isLoading || !isReady}
-              >
-                <Camera className="h-5 w-5 mr-2" />
-                Ambil Foto
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  onClick={capturePhoto}
+                  className="flex-1"
+                  size="lg"
+                  disabled={isLoading || !isReady}
+                >
+                  <Camera className="h-5 w-5 mr-2" />
+                  Ambil Foto
+                </Button>
+              </div>
             </>
           )}
 
