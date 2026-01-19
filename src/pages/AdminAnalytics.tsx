@@ -121,6 +121,7 @@ const AdminAnalytics = () => {
         .from('profiles')
         .select('id, user_id, full_name, email, department, employee_type')
         .eq('is_active', true)
+        .eq('attendance_required', true)
         .order('full_name');
 
       if (error) throw error;
