@@ -91,6 +91,9 @@ const Dashboard = () => {
       return data as ProfileData | null;
     },
     enabled: !!user?.id,
+    // Avoid stale cached profile after admin edits (employee_type, geofence, shift)
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 
   // Fetch company settings based on user's company_id
