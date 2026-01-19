@@ -306,6 +306,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          attendance_required: boolean
           avatar_url: string | null
           company_id: string | null
           created_at: string
@@ -325,6 +326,7 @@ export type Database = {
           username: string | null
         }
         Insert: {
+          attendance_required?: boolean
           avatar_url?: string | null
           company_id?: string | null
           created_at?: string
@@ -344,6 +346,7 @@ export type Database = {
           username?: string | null
         }
         Update: {
+          attendance_required?: boolean
           avatar_url?: string | null
           company_id?: string | null
           created_at?: string
