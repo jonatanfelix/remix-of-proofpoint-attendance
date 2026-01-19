@@ -462,8 +462,9 @@ const AdminSettings = () => {
     }
   };
 
-  // Initialize map only once, separately from data
+  // Initialize map when location tab becomes visible
   useEffect(() => {
+    if (activeTab !== 'location') return;
     if (!mapRef.current || mapInstanceRef.current) return;
 
     console.log('[AdminSettings] Initializing map');
@@ -529,7 +530,7 @@ const AdminSettings = () => {
         circleRef.current = null;
       }
     };
-  }, [roleLoading, companyLoading]);
+  }, [activeTab]);
 
   // Update map when company data loads
   useEffect(() => {
@@ -571,6 +572,36 @@ const AdminSettings = () => {
       circleRef.current.setRadius(radius);
     }
   }, [radius]);
+
+  // If user sets lat/lng before the map is ready (e.g. via GPS), apply it once map exists
+  useEffect(() => {
+    if (activeTab !== 'location') return;
+    if (!mapReady || !mapInstanceRef.current) return;
+    if (latitude == null || longitude == null) return;
+
+    const lat = latitude;
+    const lng = longitude;
+
+    if (markerRef.current) {
+      markerRef.current.setLatLng([lat, lng]);
+    } else {
+      markerRef.current = L.marker([lat, lng]).addTo(mapInstanceRef.current);
+    }
+
+    if (circleRef.current) {
+      circleRef.current.setLatLng([lat, lng]);
+      circleRef.current.setRadius(radiusRef.current);
+    } else {
+      circleRef.current = L.circle([lat, lng], {
+        color: '#3b82f6',
+        fillColor: '#3b82f6',
+        fillOpacity: 0.2,
+        radius: radiusRef.current,
+      }).addTo(mapInstanceRef.current);
+    }
+
+    mapInstanceRef.current.setView([lat, lng], 17);
+  }, [activeTab, mapReady, latitude, longitude]);
 
   // Invalidate map size when switching to location tab
   useEffect(() => {
