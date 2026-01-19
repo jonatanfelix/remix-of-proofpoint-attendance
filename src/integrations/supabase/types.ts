@@ -308,6 +308,7 @@ export type Database = {
         Row: {
           attendance_required: boolean
           avatar_url: string | null
+          base_salary: number | null
           company_id: string | null
           created_at: string
           department: string | null
@@ -320,6 +321,7 @@ export type Database = {
           leave_balance: number
           requires_geofence: boolean
           role: Database["public"]["Enums"]["app_role"]
+          salary_type: string | null
           shift_id: string | null
           updated_at: string
           user_id: string
@@ -328,6 +330,7 @@ export type Database = {
         Insert: {
           attendance_required?: boolean
           avatar_url?: string | null
+          base_salary?: number | null
           company_id?: string | null
           created_at?: string
           department?: string | null
@@ -340,6 +343,7 @@ export type Database = {
           leave_balance?: number
           requires_geofence?: boolean
           role?: Database["public"]["Enums"]["app_role"]
+          salary_type?: string | null
           shift_id?: string | null
           updated_at?: string
           user_id: string
@@ -348,6 +352,7 @@ export type Database = {
         Update: {
           attendance_required?: boolean
           avatar_url?: string | null
+          base_salary?: number | null
           company_id?: string | null
           created_at?: string
           department?: string | null
@@ -360,6 +365,7 @@ export type Database = {
           leave_balance?: number
           requires_geofence?: boolean
           role?: Database["public"]["Enums"]["app_role"]
+          salary_type?: string | null
           shift_id?: string | null
           updated_at?: string
           user_id?: string
