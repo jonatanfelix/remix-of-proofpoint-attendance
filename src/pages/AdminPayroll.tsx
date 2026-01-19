@@ -65,6 +65,7 @@ interface Employee {
     name: string;
     start_time: string;
     end_time: string;
+    working_days: number[];
   } | null;
 }
 
@@ -213,7 +214,7 @@ const AdminPayroll = () => {
         .select(`
           id, user_id, full_name, email, department, employee_type, attendance_required,
           base_salary, salary_type, created_at,
-          shifts (name, start_time, end_time)
+          shifts (name, start_time, end_time, working_days)
         `)
         .eq('is_active', true)
         .eq('attendance_required', true)
@@ -334,8 +335,11 @@ const AdminPayroll = () => {
         // Skip days before the employee joined
         if (day < empJoinDate) return;
 
-        // Skip weekends
-        if (isWeekend(day)) return;
+        // Check if this day is a working day based on shift's working_days
+        // Default to Mon-Fri (1-5) if no shift assigned
+        const workingDaysConfig = emp.shifts?.working_days || [1, 2, 3, 4, 5];
+        const dayOfWeek = day.getDay(); // 0 = Sunday, 6 = Saturday
+        if (!workingDaysConfig.includes(dayOfWeek)) return;
 
         // Skip holidays
         if (holidayDates.has(dateStr)) return;
