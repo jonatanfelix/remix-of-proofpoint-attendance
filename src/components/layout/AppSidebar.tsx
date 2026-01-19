@@ -1,4 +1,4 @@
-import { Clock, LayoutDashboard, History, CalendarDays, Users, Settings, LogOut, Shield, Calendar, FileText, LayoutGrid, PanelLeftClose, PanelLeft, BarChart3, DollarSign, TrendingUp } from 'lucide-react';
+import { Clock, LayoutDashboard, History, CalendarDays, Users, Settings, LogOut, Shield, Calendar, FileText, LayoutGrid, PanelLeftClose, PanelLeft, BarChart3, DollarSign, TrendingUp, UserCircle } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery } from '@tanstack/react-query';
@@ -25,6 +25,7 @@ const userMenuItems = [
   { title: 'Clock In/Out', url: '/clock', icon: Clock },
   { title: 'History', url: '/history', icon: History },
   { title: 'Leave Requests', url: '/leave-request', icon: CalendarDays },
+  { title: 'Profile', url: '/profile', icon: UserCircle },
 ];
 
 const adminMenuItems = [
