@@ -185,8 +185,10 @@ const AdminEmployees = () => {
 
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['admin-employees'] });
+      // Ensure any open pages (Dashboard/Clock/Profile) refresh the updated employee type
+      queryClient.invalidateQueries({ queryKey: ['profile', variables.userId] });
       toast.success('Data karyawan berhasil diperbarui!');
       setEditingEmployee(null);
     },
