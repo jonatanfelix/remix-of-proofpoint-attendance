@@ -103,21 +103,42 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar">
       {/* Header - Logo & Toggle */}
       <SidebarHeader className={cn("border-b border-sidebar-border", isCollapsed ? "p-2" : "p-4")}>
-        <div className={cn("flex items-center", isCollapsed ? "justify-center" : "justify-between")}>
-          <Link to="/" className="flex items-center gap-3 overflow-hidden">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-sidebar-foreground shrink-0">
-              <Clock className="h-5 w-5 text-sidebar-foreground" />
-            </div>
-            <span className={cn("text-lg font-bold text-sidebar-foreground whitespace-nowrap transition-opacity", isCollapsed ? "opacity-0 w-0 hidden" : "opacity-100")}>GeoAttend</span>
-          </Link>
-          {!isCollapsed && (
-            <button
-              onClick={toggleSidebar}
-              className="hidden md:flex p-1.5 text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 rounded-md transition-colors shrink-0"
-              title="Collapse sidebar"
-            >
-              <PanelLeftClose className="h-4 w-4" />
-            </button>
+        <div className={cn("flex items-center", isCollapsed ? "flex-col gap-2" : "justify-between")}>
+          {isCollapsed ? (
+            <>
+              {/* Collapsed: Show icon centered */}
+              <Link to="/" className="flex items-center justify-center">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-sidebar-foreground shrink-0">
+                  <Clock className="h-5 w-5 text-sidebar-foreground" />
+                </div>
+              </Link>
+              {/* Expand button below icon */}
+              <button
+                onClick={toggleSidebar}
+                className="hidden md:flex p-1.5 text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 rounded-md transition-colors"
+                title="Expand sidebar"
+              >
+                <PanelLeft className="h-4 w-4" />
+              </button>
+            </>
+          ) : (
+            <>
+              {/* Expanded: Show logo and text */}
+              <Link to="/" className="flex items-center gap-3 overflow-hidden">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-sidebar-foreground shrink-0">
+                  <Clock className="h-5 w-5 text-sidebar-foreground" />
+                </div>
+                <span className="text-lg font-bold text-sidebar-foreground whitespace-nowrap">GeoAttend</span>
+              </Link>
+              {/* Collapse button */}
+              <button
+                onClick={toggleSidebar}
+                className="hidden md:flex p-1.5 text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 rounded-md transition-colors shrink-0"
+                title="Collapse sidebar"
+              >
+                <PanelLeftClose className="h-4 w-4" />
+              </button>
+            </>
           )}
         </div>
       </SidebarHeader>
