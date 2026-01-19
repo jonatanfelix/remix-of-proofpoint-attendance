@@ -60,6 +60,7 @@ interface Employee {
   attendance_required: boolean;
   base_salary: number | null;
   salary_type: 'daily' | 'monthly' | null;
+  created_at: string;
   shifts: {
     name: string;
     start_time: string;
@@ -211,7 +212,7 @@ const AdminPayroll = () => {
         .from('profiles')
         .select(`
           id, user_id, full_name, email, department, employee_type, attendance_required,
-          base_salary, salary_type,
+          base_salary, salary_type, created_at,
           shifts (name, start_time, end_time)
         `)
         .eq('is_active', true)
@@ -323,8 +324,15 @@ const AdminPayroll = () => {
       const [startHour, startMin] = workStartTime.split(':').map(Number);
       const [endHour, endMin] = workEndTime.split(':').map(Number);
 
+      // Get employee join date (start of the day they were created)
+      const empJoinDate = new Date(emp.created_at);
+      empJoinDate.setHours(0, 0, 0, 0);
+
       dateRange.days.forEach((day) => {
         const dateStr = format(day, 'yyyy-MM-dd');
+
+        // Skip days before the employee joined
+        if (day < empJoinDate) return;
 
         // Skip weekends
         if (isWeekend(day)) return;
