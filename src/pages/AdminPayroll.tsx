@@ -335,33 +335,10 @@ const AdminPayroll = () => {
         // Skip days before the employee joined
         if (day < empJoinDate) return;
 
-        // Check if this day is a working day based on shift's working_days
-        // Default to Mon-Fri (1-5) if no shift assigned
-        const workingDaysConfig = emp.shifts?.working_days || [1, 2, 3, 4, 5];
-        const dayOfWeek = day.getDay(); // 0 = Sunday, 6 = Saturday
-        if (!workingDaysConfig.includes(dayOfWeek)) return;
-
         // Skip holidays
         if (holidayDates.has(dateStr)) return;
 
-        // This is a working day
-        workingDays++;
-
-        // Check if on leave
-        const empLeave = leaves?.find(
-          (l) =>
-            l.user_id === emp.user_id &&
-            dateStr >= l.start_date &&
-            dateStr <= l.end_date
-        );
-        if (empLeave) {
-          if (empLeave.leave_type === 'sakit') sickDays++;
-          else if (empLeave.leave_type === 'izin') permitDays++;
-          else leaveDays++;
-          return;
-        }
-
-        // Check attendance
+        // Check attendance for this day
         const dayAttendance = attendance?.filter(
           (a) =>
             a.user_id === emp.user_id &&
@@ -371,14 +348,45 @@ const AdminPayroll = () => {
         const clockIns = dayAttendance.filter((a) => a.record_type === 'clock_in');
         const clockOuts = dayAttendance.filter((a) => a.record_type === 'clock_out');
 
-        if (clockIns.length === 0) {
-          if (day <= new Date()) {
-            absentDays++;
+        // For FIELD employees: working days = days they clocked in
+        if (emp.employee_type === 'field') {
+          if (clockIns.length > 0) {
+            workingDays++;
+            presentDays++;
           }
-          return;
-        }
+          // Field employees don't have "absent" concept if they don't clock in on a day
+        } else {
+          // For OFFICE employees: use shift working_days config
+          const workingDaysConfig = emp.shifts?.working_days || [1, 2, 3, 4, 5];
+          const dayOfWeek = day.getDay(); // 0 = Sunday, 6 = Saturday
+          if (!workingDaysConfig.includes(dayOfWeek)) return;
 
-        presentDays++;
+          // This is a scheduled working day for office employee
+          workingDays++;
+
+          // Check if on leave
+          const empLeave = leaves?.find(
+            (l) =>
+              l.user_id === emp.user_id &&
+              dateStr >= l.start_date &&
+              dateStr <= l.end_date
+          );
+          if (empLeave) {
+            if (empLeave.leave_type === 'sakit') sickDays++;
+            else if (empLeave.leave_type === 'izin') permitDays++;
+            else leaveDays++;
+            return;
+          }
+
+          if (clockIns.length === 0) {
+            if (day <= new Date()) {
+              absentDays++;
+            }
+            return;
+          }
+
+          presentDays++;
+        }
 
         // Calculate work hours
         if (clockOuts.length > 0) {
