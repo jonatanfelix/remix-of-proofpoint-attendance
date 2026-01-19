@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
   SelectContent,
@@ -592,690 +593,11 @@ const AdminSettings = () => {
   return (
     <AppLayout>
       <div className="container mx-auto p-4 space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">Pengaturan Perusahaan</h1>
-          <p className="text-muted-foreground">Konfigurasi lokasi kantor dan jam kerja</p>
-        </div>
-
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Company Info */}
-          <Card className="border-2 border-foreground">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building className="h-5 w-5" />
-                Informasi Perusahaan
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="company-name">Nama Perusahaan</Label>
-                <Input
-                  id="company-name"
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  placeholder="PT. Contoh Indonesia"
-                  className="border-2 border-foreground"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="work-start" className="flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
-                  Jam Mulai Kerja Default
-                </Label>
-                <Input
-                  id="work-start"
-                  type="time"
-                  value={workStartTime}
-                  onChange={(e) => setWorkStartTime(e.target.value)}
-                  className="border-2 border-foreground"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Digunakan jika karyawan tidak memiliki shift
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="grace-period">Toleransi Keterlambatan (menit)</Label>
-                <Input
-                  id="grace-period"
-                  type="number"
-                  min={0}
-                  max={60}
-                  value={gracePeriod}
-                  onChange={(e) => setGracePeriod(Number(e.target.value))}
-                  className="border-2 border-foreground"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Contoh: 15 menit = tidak dihitung terlambat jika masuk s/d 08:15
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="radius" className="flex items-center gap-2">
-                  <Target className="h-4 w-4" />
-                  Radius Geofence (meter)
-                </Label>
-                <Input
-                  id="radius"
-                  type="number"
-                  min={50}
-                  max={1000}
-                  value={radius}
-                  onChange={(e) => setRadius(Number(e.target.value))}
-                  className="border-2 border-foreground"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Jarak maksimal karyawan dari titik kantor untuk bisa absen
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Operational Settings */}
-          <Card className="border-2 border-foreground">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Pengaturan Operasional
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="annual-leave">Kuota Cuti Tahunan (hari)</Label>
-                <Input
-                  id="annual-leave"
-                  type="number"
-                  min={0}
-                  max={30}
-                  value={annualLeaveQuota}
-                  onChange={(e) => setAnnualLeaveQuota(Number(e.target.value))}
-                  className="border-2 border-foreground"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Jumlah hari cuti yang diberikan per karyawan per tahun
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="overtime-start">Lembur Mulai Setelah (menit)</Label>
-                <Input
-                  id="overtime-start"
-                  type="number"
-                  min={0}
-                  value={overtimeStartAfter}
-                  onChange={(e) => setOvertimeStartAfter(Number(e.target.value))}
-                  className="border-2 border-foreground"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Contoh: 30 = lembur dihitung setelah 30 menit dari jam pulang shift
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="standard-hours">Jam Kerja Standar (jam/hari)</Label>
-                <Input
-                  id="standard-hours"
-                  type="number"
-                  min={1}
-                  max={24}
-                  value={standardWorkHours}
-                  onChange={(e) => setStandardWorkHours(Number(e.target.value))}
-                  className="border-2 border-foreground"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Digunakan untuk perhitungan total jam kerja dalam payroll
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="overtime-rate">Rate Lembur per Jam (Rp)</Label>
-                <Input
-                  id="overtime-rate"
-                  type="number"
-                  min={0}
-                  value={overtimeRate}
-                  onChange={(e) => setOvertimeRate(Number(e.target.value))}
-                  className="border-2 border-foreground"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="early-leave">Potongan Pulang Awal per Menit (Rp)</Label>
-                <Input
-                  id="early-leave"
-                  type="number"
-                  min={0}
-                  value={earlyLeaveDeduction}
-                  onChange={(e) => setEarlyLeaveDeduction(Number(e.target.value))}
-                  className="border-2 border-foreground"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Isi 0 jika tidak ada potongan untuk pulang lebih awal
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="late-penalty">Denda Keterlambatan per Menit (Rp)</Label>
-                <Input
-                  id="late-penalty"
-                  type="number"
-                  min={0}
-                  value={latePenalty}
-                  onChange={(e) => setLatePenalty(Number(e.target.value))}
-                  className="border-2 border-foreground"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Default: 1000. Dihitung setelah lewat masa toleransi.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Coordinates Display */}
-          <Card className="border-2 border-foreground">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MapPin className="h-5 w-5" />
-                Koordinat Kantor
-              </CardTitle>
-              <CardDescription>
-                Gunakan GPS atau klik pada peta untuk menentukan lokasi kantor
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Use My Location Button */}
-              <Button
-                type="button"
-                onClick={handleUseMyLocation}
-                disabled={isGettingLocation}
-                className="w-full border-2 border-foreground"
-                variant="outline"
-              >
-                {isGettingLocation ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Navigation className="h-4 w-4 mr-2" />
-                )}
-                {isGettingLocation ? 'Mendapatkan lokasi...' : 'Gunakan Lokasi Saya Saat Ini'}
-              </Button>
-
-              {/* Coordinates */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="office-lat">Latitude</Label>
-                  <Input
-                    id="office-lat"
-                    type="number"
-                    inputMode="decimal"
-                    step="0.000001"
-                    value={latitude ?? ''}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setLatitude(v === '' ? null : Number(v));
-                    }}
-                    className="border-2 border-foreground"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="office-lng">Longitude</Label>
-                  <Input
-                    id="office-lng"
-                    type="number"
-                    inputMode="decimal"
-                    step="0.000001"
-                    value={longitude ?? ''}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setLongitude(v === '' ? null : Number(v));
-                    }}
-                    className="border-2 border-foreground"
-                  />
-                </div>
-              </div>
-
-              <Button
-                type="button"
-                variant="secondary"
-                className="w-full"
-                disabled={latitude == null || longitude == null}
-                onClick={() => {
-                  if (latitude == null || longitude == null) return;
-                  handleLocationSelect(latitude, longitude);
-                }}
-              >
-                Terapkan Koordinat
-              </Button>
-
-              <p className="text-xs text-muted-foreground">
-                Tips: jika GPS browser meleset (sering terjadi di laptop/PC), salin koordinat dari Google Maps lalu klik "Terapkan Koordinat".
-              </p>
-
-              {latitude && longitude && (
-                <div className="p-3 rounded-lg bg-primary/10 border-2 border-primary">
-                  <p className="text-sm font-medium text-primary">
-                    ✓ Lokasi kantor sudah ditentukan
-                  </p>
-                </div>
-              )}
-
-              {!latitude || !longitude ? (
-                <div className="p-3 rounded-lg bg-destructive/10 border-2 border-destructive">
-                  <p className="text-sm font-medium text-destructive">
-                    ⚠ Cari alamat atau klik peta untuk menentukan lokasi
-                  </p>
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* BPJS Configuration */}
-        <Card className="border-2 border-foreground lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5" />
-              Konfigurasi BPJS (Opsional)
-            </CardTitle>
-            <CardDescription>
-              Rate potongan BPJS untuk karyawan dan perusahaan dalam persen (%)
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {/* BPJS Kesehatan */}
-              <div className="p-4 rounded-lg border-2 border-foreground bg-blue-50/50 dark:bg-blue-950/30 space-y-3">
-                <p className="font-medium text-blue-700 dark:text-blue-300">BPJS Kesehatan</p>
-                <div className="space-y-2">
-                  <Label htmlFor="bpjs-kes-emp" className="text-sm">Karyawan (%)</Label>
-                  <Input
-                    id="bpjs-kes-emp"
-                    type="number"
-                    step="0.1"
-                    min={0}
-                    max={10}
-                    value={bpjsKesehatanEmployee}
-                    onChange={(e) => setBpjsKesehatanEmployee(Number(e.target.value))}
-                    className="border-2 border-foreground"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="bpjs-kes-er" className="text-sm">Perusahaan (%)</Label>
-                  <Input
-                    id="bpjs-kes-er"
-                    type="number"
-                    step="0.1"
-                    min={0}
-                    max={10}
-                    value={bpjsKesehatanEmployer}
-                    onChange={(e) => setBpjsKesehatanEmployer(Number(e.target.value))}
-                    className="border-2 border-foreground"
-                  />
-                </div>
-              </div>
-
-              {/* BPJS TK JHT */}
-              <div className="p-4 rounded-lg border-2 border-foreground bg-green-50/50 dark:bg-green-950/30 space-y-3">
-                <p className="font-medium text-green-700 dark:text-green-300">BPJS TK - JHT</p>
-                <div className="space-y-2">
-                  <Label htmlFor="bpjs-jht-emp" className="text-sm">Karyawan (%)</Label>
-                  <Input
-                    id="bpjs-jht-emp"
-                    type="number"
-                    step="0.1"
-                    min={0}
-                    max={10}
-                    value={bpjsTkJhtEmployee}
-                    onChange={(e) => setBpjsTkJhtEmployee(Number(e.target.value))}
-                    className="border-2 border-foreground"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="bpjs-jht-er" className="text-sm">Perusahaan (%)</Label>
-                  <Input
-                    id="bpjs-jht-er"
-                    type="number"
-                    step="0.1"
-                    min={0}
-                    max={10}
-                    value={bpjsTkJhtEmployer}
-                    onChange={(e) => setBpjsTkJhtEmployer(Number(e.target.value))}
-                    className="border-2 border-foreground"
-                  />
-                </div>
-              </div>
-
-              {/* BPJS TK JP */}
-              <div className="p-4 rounded-lg border-2 border-foreground bg-purple-50/50 dark:bg-purple-950/30 space-y-3">
-                <p className="font-medium text-purple-700 dark:text-purple-300">BPJS TK - JP</p>
-                <div className="space-y-2">
-                  <Label htmlFor="bpjs-jp-emp" className="text-sm">Karyawan (%)</Label>
-                  <Input
-                    id="bpjs-jp-emp"
-                    type="number"
-                    step="0.1"
-                    min={0}
-                    max={10}
-                    value={bpjsTkJpEmployee}
-                    onChange={(e) => setBpjsTkJpEmployee(Number(e.target.value))}
-                    className="border-2 border-foreground"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="bpjs-jp-er" className="text-sm">Perusahaan (%)</Label>
-                  <Input
-                    id="bpjs-jp-er"
-                    type="number"
-                    step="0.1"
-                    min={0}
-                    max={10}
-                    value={bpjsTkJpEmployer}
-                    onChange={(e) => setBpjsTkJpEmployer(Number(e.target.value))}
-                    className="border-2 border-foreground"
-                  />
-                </div>
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Default: Kesehatan (1%/4%), JHT (2%/3.7%), JP (1%/2%). Isi 0 jika tidak menggunakan.
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Tax Configuration */}
-        <Card className="border-2 border-foreground lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Banknote className="h-5 w-5" />
-              Konfigurasi Pajak PPh 21 (Opsional)
-            </CardTitle>
-            <CardDescription>
-              Pengaturan default pajak penghasilan karyawan
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="ptkp-default">Status PTKP Default</Label>
-                <Select value={ptkpDefault} onValueChange={setPtkpDefault}>
-                  <SelectTrigger id="ptkp-default" className="border-2 border-foreground">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="TK/0">TK/0 - Tidak Kawin, 0 Tanggungan</SelectItem>
-                    <SelectItem value="TK/1">TK/1 - Tidak Kawin, 1 Tanggungan</SelectItem>
-                    <SelectItem value="TK/2">TK/2 - Tidak Kawin, 2 Tanggungan</SelectItem>
-                    <SelectItem value="TK/3">TK/3 - Tidak Kawin, 3 Tanggungan</SelectItem>
-                    <SelectItem value="K/0">K/0 - Kawin, 0 Tanggungan</SelectItem>
-                    <SelectItem value="K/1">K/1 - Kawin, 1 Tanggungan</SelectItem>
-                    <SelectItem value="K/2">K/2 - Kawin, 2 Tanggungan</SelectItem>
-                    <SelectItem value="K/3">K/3 - Kawin, 3 Tanggungan</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Digunakan saat simulasi PPh 21 di halaman Payroll
-                </p>
-              </div>
-
-              <div className="flex items-center justify-between p-4 rounded-lg border-2 border-foreground bg-muted/30">
-                <div className="space-y-1">
-                  <Label className="text-base">Aktifkan PPh 21 Default</Label>
-                  <p className="text-sm text-muted-foreground">
-                    {usePph21
-                      ? 'PPh 21 akan dihitung otomatis di payroll'
-                      : 'PPh 21 tidak dihitung (bisa diaktifkan manual di Payroll)'}
-                  </p>
-                </div>
-                <Switch
-                  checked={usePph21}
-                  onCheckedChange={setUsePph21}
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Shift Management */}
-        <Card className="border-2 border-foreground">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5" />
-              Manajemen Shift
-            </CardTitle>
-            <CardDescription>
-              Kelola shift kerja karyawan termasuk hari kerja dan durasi istirahat
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Add new shift */}
-            <div className="p-4 rounded-lg border-2 border-foreground bg-muted/30 space-y-3">
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Input
-                  placeholder="Nama shift (contoh: Pagi)"
-                  value={newShiftName}
-                  onChange={(e) => setNewShiftName(e.target.value)}
-                  className="border-2 border-foreground flex-1"
-                />
-                <div className="flex gap-2">
-                  <div className="flex items-center gap-1">
-                    <Label className="text-xs whitespace-nowrap">Mulai:</Label>
-                    <Input
-                      type="time"
-                      value={newShiftStart}
-                      onChange={(e) => setNewShiftStart(e.target.value)}
-                      className="border-2 border-foreground w-28"
-                    />
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Label className="text-xs whitespace-nowrap">Selesai:</Label>
-                    <Input
-                      type="time"
-                      value={newShiftEnd}
-                      onChange={(e) => setNewShiftEnd(e.target.value)}
-                      className="border-2 border-foreground w-28"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Working days selection */}
-              <div className="space-y-2">
-                <Label className="text-xs">Hari Kerja:</Label>
-                <div className="flex flex-wrap gap-1">
-                  {DAYS_OF_WEEK.map((day) => (
-                    <Button
-                      key={day.value}
-                      type="button"
-                      size="sm"
-                      variant={newShiftWorkingDays.includes(day.value) ? 'default' : 'outline'}
-                      className="h-8 px-2 text-xs border-2 border-foreground"
-                      onClick={() => toggleWorkingDay(day.value, true)}
-                    >
-                      {day.label}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Break duration */}
-              <div className="flex items-center gap-2">
-                <Label className="text-xs whitespace-nowrap">Durasi Istirahat:</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  max={120}
-                  value={newShiftBreakDuration}
-                  onChange={(e) => setNewShiftBreakDuration(Number(e.target.value))}
-                  className="border-2 border-foreground w-20"
-                />
-                <span className="text-xs text-muted-foreground">menit</span>
-              </div>
-
-              <Button
-                onClick={() => addShiftMutation.mutate()}
-                disabled={addShiftMutation.isPending || !newShiftName.trim() || newShiftWorkingDays.length === 0}
-                className="w-full sm:w-auto"
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                Tambah Shift
-              </Button>
-            </div>
-
-            {/* Shift list */}
-            <div className="space-y-3">
-              {shiftsLoading ? (
-                <p className="text-muted-foreground text-center py-4">Memuat shift...</p>
-              ) : shifts?.length === 0 ? (
-                <p className="text-muted-foreground text-center py-4">Belum ada shift. Tambahkan shift pertama di atas.</p>
-              ) : (
-                shifts?.map((shift) => (
-                  <div
-                    key={shift.id}
-                    className="p-3 rounded-lg border-2 border-foreground"
-                  >
-                    {editingShift?.id === shift.id ? (
-                      <div className="space-y-3">
-                        <div className="flex flex-col sm:flex-row gap-2">
-                          <Input
-                            value={editShiftName}
-                            onChange={(e) => setEditShiftName(e.target.value)}
-                            className="border-2 border-foreground flex-1"
-                          />
-                          <div className="flex gap-2">
-                            <Input
-                              type="time"
-                              value={editShiftStart}
-                              onChange={(e) => setEditShiftStart(e.target.value)}
-                              className="border-2 border-foreground w-28"
-                            />
-                            <Input
-                              type="time"
-                              value={editShiftEnd}
-                              onChange={(e) => setEditShiftEnd(e.target.value)}
-                              className="border-2 border-foreground w-28"
-                            />
-                          </div>
-                        </div>
-
-                        {/* Edit working days */}
-                        <div className="space-y-2">
-                          <Label className="text-xs">Hari Kerja:</Label>
-                          <div className="flex flex-wrap gap-1">
-                            {DAYS_OF_WEEK.map((day) => (
-                              <Button
-                                key={day.value}
-                                type="button"
-                                size="sm"
-                                variant={editShiftWorkingDays.includes(day.value) ? 'default' : 'outline'}
-                                className="h-8 px-2 text-xs border-2 border-foreground"
-                                onClick={() => toggleWorkingDay(day.value, false)}
-                              >
-                                {day.label}
-                              </Button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Edit break duration */}
-                        <div className="flex items-center gap-2">
-                          <Label className="text-xs whitespace-nowrap">Durasi Istirahat:</Label>
-                          <Input
-                            type="number"
-                            min={0}
-                            max={120}
-                            value={editShiftBreakDuration}
-                            onChange={(e) => setEditShiftBreakDuration(Number(e.target.value))}
-                            className="border-2 border-foreground w-20"
-                          />
-                          <span className="text-xs text-muted-foreground">menit</span>
-                        </div>
-
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            onClick={() => updateShiftMutation.mutate()}
-                            disabled={updateShiftMutation.isPending}
-                          >
-                            <Check className="h-4 w-4 mr-1" />
-                            Simpan
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleCancelEditShift}
-                            className="border-2 border-foreground"
-                          >
-                            <X className="h-4 w-4 mr-1" />
-                            Batal
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-start justify-between">
-                        <div className="space-y-1">
-                          <p className="font-medium">{shift.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {shift.start_time.slice(0, 5)} - {shift.end_time.slice(0, 5)} • Istirahat {shift.break_duration_minutes || 60} menit
-                          </p>
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {DAYS_OF_WEEK.map((day) => (
-                              <span
-                                key={day.value}
-                                className={`text-xs px-1.5 py-0.5 rounded ${(shift.working_days || [1, 2, 3, 4, 5]).includes(day.value)
-                                  ? 'bg-primary text-primary-foreground'
-                                  : 'bg-muted text-muted-foreground'
-                                  }`}
-                              >
-                                {day.label}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="flex gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEditShift(shift)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => deleteShiftMutation.mutate(shift.id)}
-                            disabled={deleteShiftMutation.isPending}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Map */}
-        <Card className="border-2 border-foreground">
-          <CardHeader>
-            <CardTitle>Peta Lokasi Kantor</CardTitle>
-            <CardDescription>
-              Klik pada peta untuk memilih titik pusat kantor. Area biru menunjukkan radius geofence.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div
-              ref={mapRef}
-              className="h-[400px] rounded-lg overflow-hidden border-2 border-foreground"
-              style={{ minHeight: '400px' }}
-            />
-          </CardContent>
-        </Card>
-
-        {/* Save Button */}
-        <div className="flex justify-end">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">Pengaturan Perusahaan</h1>
+            <p className="text-muted-foreground">Konfigurasi lokasi kantor, jam kerja, dan payroll</p>
+          </div>
           <Button
             onClick={handleSave}
             disabled={updateMutation.isPending}
@@ -1286,6 +608,692 @@ const AdminSettings = () => {
             {updateMutation.isPending ? 'Menyimpan...' : 'Simpan Pengaturan'}
           </Button>
         </div>
+
+        <Tabs defaultValue="general" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto">
+            <TabsTrigger value="general" className="flex items-center gap-2 py-3">
+              <Building className="h-4 w-4" />
+              <span className="hidden sm:inline">Umum</span>
+            </TabsTrigger>
+            <TabsTrigger value="location" className="flex items-center gap-2 py-3">
+              <MapPin className="h-4 w-4" />
+              <span className="hidden sm:inline">Lokasi</span>
+            </TabsTrigger>
+            <TabsTrigger value="payroll" className="flex items-center gap-2 py-3">
+              <Banknote className="h-4 w-4" />
+              <span className="hidden sm:inline">Payroll</span>
+            </TabsTrigger>
+            <TabsTrigger value="shifts" className="flex items-center gap-2 py-3">
+              <Clock className="h-4 w-4" />
+              <span className="hidden sm:inline">Shift</span>
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Tab: Umum */}
+          <TabsContent value="general" className="space-y-6">
+            <div className="grid gap-6 lg:grid-cols-2">
+              {/* Company Info */}
+              <Card className="border-2 border-foreground">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Building className="h-5 w-5" />
+                    Informasi Perusahaan
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="company-name">Nama Perusahaan</Label>
+                    <Input
+                      id="company-name"
+                      value={companyName}
+                      onChange={(e) => setCompanyName(e.target.value)}
+                      placeholder="PT. Contoh Indonesia"
+                      className="border-2 border-foreground"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="work-start" className="flex items-center gap-2">
+                      <Clock className="h-4 w-4" />
+                      Jam Mulai Kerja Default
+                    </Label>
+                    <Input
+                      id="work-start"
+                      type="time"
+                      value={workStartTime}
+                      onChange={(e) => setWorkStartTime(e.target.value)}
+                      className="border-2 border-foreground"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Digunakan jika karyawan tidak memiliki shift
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="annual-leave">Kuota Cuti Tahunan (hari)</Label>
+                    <Input
+                      id="annual-leave"
+                      type="number"
+                      min={0}
+                      max={30}
+                      value={annualLeaveQuota}
+                      onChange={(e) => setAnnualLeaveQuota(Number(e.target.value))}
+                      className="border-2 border-foreground"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="standard-hours">Jam Kerja Standar (jam/hari)</Label>
+                    <Input
+                      id="standard-hours"
+                      type="number"
+                      min={1}
+                      max={24}
+                      value={standardWorkHours}
+                      onChange={(e) => setStandardWorkHours(Number(e.target.value))}
+                      className="border-2 border-foreground"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Attendance Settings */}
+              <Card className="border-2 border-foreground">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="h-5 w-5" />
+                    Pengaturan Absensi
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="grace-period">Toleransi Keterlambatan (menit)</Label>
+                    <Input
+                      id="grace-period"
+                      type="number"
+                      min={0}
+                      max={60}
+                      value={gracePeriod}
+                      onChange={(e) => setGracePeriod(Number(e.target.value))}
+                      className="border-2 border-foreground"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Contoh: 15 = tidak dihitung terlambat jika masuk s/d 08:15
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="radius" className="flex items-center gap-2">
+                      <Target className="h-4 w-4" />
+                      Radius Geofence (meter)
+                    </Label>
+                    <Input
+                      id="radius"
+                      type="number"
+                      min={50}
+                      max={1000}
+                      value={radius}
+                      onChange={(e) => setRadius(Number(e.target.value))}
+                      className="border-2 border-foreground"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Jarak maksimal dari titik kantor untuk bisa absen
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="overtime-start">Lembur Mulai Setelah (menit)</Label>
+                    <Input
+                      id="overtime-start"
+                      type="number"
+                      min={0}
+                      value={overtimeStartAfter}
+                      onChange={(e) => setOvertimeStartAfter(Number(e.target.value))}
+                      className="border-2 border-foreground"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Lembur dihitung setelah X menit dari jam pulang shift
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* Tab: Lokasi */}
+          <TabsContent value="location" className="space-y-6">
+            <div className="grid gap-6 lg:grid-cols-2">
+              {/* Coordinates */}
+              <Card className="border-2 border-foreground">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <MapPin className="h-5 w-5" />
+                    Koordinat Kantor
+                  </CardTitle>
+                  <CardDescription>
+                    Gunakan GPS atau klik pada peta untuk menentukan lokasi
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Button
+                    type="button"
+                    onClick={handleUseMyLocation}
+                    disabled={isGettingLocation}
+                    className="w-full border-2 border-foreground"
+                    variant="outline"
+                  >
+                    {isGettingLocation ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Navigation className="h-4 w-4 mr-2" />
+                    )}
+                    {isGettingLocation ? 'Mendapatkan lokasi...' : 'Gunakan Lokasi Saya Saat Ini'}
+                  </Button>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="office-lat">Latitude</Label>
+                      <Input
+                        id="office-lat"
+                        type="number"
+                        inputMode="decimal"
+                        step="0.000001"
+                        value={latitude ?? ''}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setLatitude(v === '' ? null : Number(v));
+                        }}
+                        className="border-2 border-foreground"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="office-lng">Longitude</Label>
+                      <Input
+                        id="office-lng"
+                        type="number"
+                        inputMode="decimal"
+                        step="0.000001"
+                        value={longitude ?? ''}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setLongitude(v === '' ? null : Number(v));
+                        }}
+                        className="border-2 border-foreground"
+                      />
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="w-full"
+                    disabled={latitude == null || longitude == null}
+                    onClick={() => {
+                      if (latitude == null || longitude == null) return;
+                      handleLocationSelect(latitude, longitude);
+                    }}
+                  >
+                    Terapkan Koordinat
+                  </Button>
+
+                  {latitude && longitude ? (
+                    <div className="p-3 rounded-lg bg-primary/10 border-2 border-primary">
+                      <p className="text-sm font-medium text-primary">
+                        ✓ Lokasi kantor sudah ditentukan
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-lg bg-destructive/10 border-2 border-destructive">
+                      <p className="text-sm font-medium text-destructive">
+                        ⚠ Klik peta untuk menentukan lokasi
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Map */}
+              <Card className="border-2 border-foreground">
+                <CardHeader>
+                  <CardTitle>Peta Lokasi Kantor</CardTitle>
+                  <CardDescription>
+                    Klik pada peta untuk memilih titik pusat kantor
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div
+                    ref={mapRef}
+                    className="h-[350px] rounded-lg overflow-hidden border-2 border-foreground"
+                    style={{ minHeight: '350px' }}
+                  />
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* Tab: Payroll */}
+          <TabsContent value="payroll" className="space-y-6">
+            {/* Deduction Settings */}
+            <Card className="border-2 border-foreground">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Banknote className="h-5 w-5" />
+                  Pengaturan Potongan & Lembur
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="late-penalty">Denda Telat per Menit (Rp)</Label>
+                    <Input
+                      id="late-penalty"
+                      type="number"
+                      min={0}
+                      value={latePenalty}
+                      onChange={(e) => setLatePenalty(Number(e.target.value))}
+                      className="border-2 border-foreground"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Dihitung setelah toleransi
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="early-leave">Potongan Pulang Awal per Menit (Rp)</Label>
+                    <Input
+                      id="early-leave"
+                      type="number"
+                      min={0}
+                      value={earlyLeaveDeduction}
+                      onChange={(e) => setEarlyLeaveDeduction(Number(e.target.value))}
+                      className="border-2 border-foreground"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Isi 0 jika tidak ada potongan
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="overtime-rate">Rate Lembur per Jam (Rp)</Label>
+                    <Input
+                      id="overtime-rate"
+                      type="number"
+                      min={0}
+                      value={overtimeRate}
+                      onChange={(e) => setOvertimeRate(Number(e.target.value))}
+                      className="border-2 border-foreground"
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* BPJS Configuration */}
+            <Card className="border-2 border-foreground">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  Konfigurasi BPJS
+                </CardTitle>
+                <CardDescription>
+                  Rate potongan BPJS dalam persen (%). Isi 0 jika tidak digunakan.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {/* BPJS Kesehatan */}
+                  <div className="p-4 rounded-lg border-2 border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/30 space-y-3">
+                    <p className="font-medium text-blue-700 dark:text-blue-300">BPJS Kesehatan</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Karyawan (%)</Label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          min={0}
+                          max={10}
+                          value={bpjsKesehatanEmployee}
+                          onChange={(e) => setBpjsKesehatanEmployee(Number(e.target.value))}
+                          className="border-2 border-foreground h-9"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Perusahaan (%)</Label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          min={0}
+                          max={10}
+                          value={bpjsKesehatanEmployer}
+                          onChange={(e) => setBpjsKesehatanEmployer(Number(e.target.value))}
+                          className="border-2 border-foreground h-9"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* BPJS TK JHT */}
+                  <div className="p-4 rounded-lg border-2 border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/30 space-y-3">
+                    <p className="font-medium text-green-700 dark:text-green-300">BPJS TK - JHT</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Karyawan (%)</Label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          min={0}
+                          max={10}
+                          value={bpjsTkJhtEmployee}
+                          onChange={(e) => setBpjsTkJhtEmployee(Number(e.target.value))}
+                          className="border-2 border-foreground h-9"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Perusahaan (%)</Label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          min={0}
+                          max={10}
+                          value={bpjsTkJhtEmployer}
+                          onChange={(e) => setBpjsTkJhtEmployer(Number(e.target.value))}
+                          className="border-2 border-foreground h-9"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* BPJS TK JP */}
+                  <div className="p-4 rounded-lg border-2 border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-950/30 space-y-3">
+                    <p className="font-medium text-purple-700 dark:text-purple-300">BPJS TK - JP</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Karyawan (%)</Label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          min={0}
+                          max={10}
+                          value={bpjsTkJpEmployee}
+                          onChange={(e) => setBpjsTkJpEmployee(Number(e.target.value))}
+                          className="border-2 border-foreground h-9"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Perusahaan (%)</Label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          min={0}
+                          max={10}
+                          value={bpjsTkJpEmployer}
+                          onChange={(e) => setBpjsTkJpEmployer(Number(e.target.value))}
+                          className="border-2 border-foreground h-9"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Tax Configuration */}
+            <Card className="border-2 border-foreground">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Banknote className="h-5 w-5" />
+                  Konfigurasi Pajak PPh 21
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="ptkp-default">Status PTKP Default</Label>
+                    <Select value={ptkpDefault} onValueChange={setPtkpDefault}>
+                      <SelectTrigger id="ptkp-default" className="border-2 border-foreground">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="TK/0">TK/0 - Tidak Kawin, 0 Tanggungan</SelectItem>
+                        <SelectItem value="TK/1">TK/1 - Tidak Kawin, 1 Tanggungan</SelectItem>
+                        <SelectItem value="TK/2">TK/2 - Tidak Kawin, 2 Tanggungan</SelectItem>
+                        <SelectItem value="TK/3">TK/3 - Tidak Kawin, 3 Tanggungan</SelectItem>
+                        <SelectItem value="K/0">K/0 - Kawin, 0 Tanggungan</SelectItem>
+                        <SelectItem value="K/1">K/1 - Kawin, 1 Tanggungan</SelectItem>
+                        <SelectItem value="K/2">K/2 - Kawin, 2 Tanggungan</SelectItem>
+                        <SelectItem value="K/3">K/3 - Kawin, 3 Tanggungan</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 rounded-lg border-2 border-foreground bg-muted/30">
+                    <div className="space-y-1">
+                      <Label className="text-base">Aktifkan PPh 21 Default</Label>
+                      <p className="text-sm text-muted-foreground">
+                        {usePph21
+                          ? 'PPh 21 dihitung otomatis di payroll'
+                          : 'PPh 21 tidak dihitung otomatis'}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={usePph21}
+                      onCheckedChange={setUsePph21}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Tab: Shift */}
+          <TabsContent value="shifts" className="space-y-6">
+            <Card className="border-2 border-foreground">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Clock className="h-5 w-5" />
+                  Manajemen Shift
+                </CardTitle>
+                <CardDescription>
+                  Kelola shift kerja termasuk hari kerja dan durasi istirahat
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Add new shift */}
+                <div className="p-4 rounded-lg border-2 border-primary/30 bg-primary/5 space-y-4">
+                  <p className="font-medium text-sm">Tambah Shift Baru</p>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <Input
+                      placeholder="Nama shift"
+                      value={newShiftName}
+                      onChange={(e) => setNewShiftName(e.target.value)}
+                      className="border-2 border-foreground"
+                    />
+                    <div className="flex items-center gap-2">
+                      <Label className="text-xs whitespace-nowrap">Mulai:</Label>
+                      <Input
+                        type="time"
+                        value={newShiftStart}
+                        onChange={(e) => setNewShiftStart(e.target.value)}
+                        className="border-2 border-foreground"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Label className="text-xs whitespace-nowrap">Selesai:</Label>
+                      <Input
+                        type="time"
+                        value={newShiftEnd}
+                        onChange={(e) => setNewShiftEnd(e.target.value)}
+                        className="border-2 border-foreground"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Label className="text-xs whitespace-nowrap">Istirahat:</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={120}
+                        value={newShiftBreakDuration}
+                        onChange={(e) => setNewShiftBreakDuration(Number(e.target.value))}
+                        className="border-2 border-foreground w-20"
+                      />
+                      <span className="text-xs text-muted-foreground">menit</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Label className="text-xs">Hari Kerja:</Label>
+                    {DAYS_OF_WEEK.map((day) => (
+                      <Button
+                        key={day.value}
+                        type="button"
+                        size="sm"
+                        variant={newShiftWorkingDays.includes(day.value) ? 'default' : 'outline'}
+                        className="h-8 px-2 text-xs border-2 border-foreground"
+                        onClick={() => toggleWorkingDay(day.value, true)}
+                      >
+                        {day.label}
+                      </Button>
+                    ))}
+                  </div>
+
+                  <Button
+                    onClick={() => addShiftMutation.mutate()}
+                    disabled={addShiftMutation.isPending || !newShiftName.trim() || newShiftWorkingDays.length === 0}
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Tambah Shift
+                  </Button>
+                </div>
+
+                {/* Shift list */}
+                <div className="space-y-3">
+                  {shiftsLoading ? (
+                    <p className="text-muted-foreground text-center py-4">Memuat shift...</p>
+                  ) : shifts?.length === 0 ? (
+                    <p className="text-muted-foreground text-center py-4">Belum ada shift. Tambahkan shift pertama di atas.</p>
+                  ) : (
+                    shifts?.map((shift) => (
+                      <div
+                        key={shift.id}
+                        className="p-4 rounded-lg border-2 border-foreground"
+                      >
+                        {editingShift?.id === shift.id ? (
+                          <div className="space-y-3">
+                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                              <Input
+                                value={editShiftName}
+                                onChange={(e) => setEditShiftName(e.target.value)}
+                                className="border-2 border-foreground"
+                              />
+                              <Input
+                                type="time"
+                                value={editShiftStart}
+                                onChange={(e) => setEditShiftStart(e.target.value)}
+                                className="border-2 border-foreground"
+                              />
+                              <Input
+                                type="time"
+                                value={editShiftEnd}
+                                onChange={(e) => setEditShiftEnd(e.target.value)}
+                                className="border-2 border-foreground"
+                              />
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  max={120}
+                                  value={editShiftBreakDuration}
+                                  onChange={(e) => setEditShiftBreakDuration(Number(e.target.value))}
+                                  className="border-2 border-foreground w-20"
+                                />
+                                <span className="text-xs text-muted-foreground">menit</span>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Label className="text-xs">Hari Kerja:</Label>
+                              {DAYS_OF_WEEK.map((day) => (
+                                <Button
+                                  key={day.value}
+                                  type="button"
+                                  size="sm"
+                                  variant={editShiftWorkingDays.includes(day.value) ? 'default' : 'outline'}
+                                  className="h-8 px-2 text-xs border-2 border-foreground"
+                                  onClick={() => toggleWorkingDay(day.value, false)}
+                                >
+                                  {day.label}
+                                </Button>
+                              ))}
+                            </div>
+
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                onClick={() => updateShiftMutation.mutate()}
+                                disabled={updateShiftMutation.isPending}
+                              >
+                                <Check className="h-4 w-4 mr-1" />
+                                Simpan
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleCancelEditShift}
+                                className="border-2 border-foreground"
+                              >
+                                <X className="h-4 w-4 mr-1" />
+                                Batal
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-start justify-between">
+                            <div className="space-y-2">
+                              <p className="font-medium">{shift.name}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {shift.start_time.slice(0, 5)} - {shift.end_time.slice(0, 5)} • Istirahat {shift.break_duration_minutes || 60} menit
+                              </p>
+                              <div className="flex flex-wrap gap-1">
+                                {DAYS_OF_WEEK.map((day) => (
+                                  <span
+                                    key={day.value}
+                                    className={`text-xs px-1.5 py-0.5 rounded ${(shift.working_days || [1, 2, 3, 4, 5]).includes(day.value)
+                                      ? 'bg-primary text-primary-foreground'
+                                      : 'bg-muted text-muted-foreground'
+                                      }`}
+                                  >
+                                    {day.label}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="flex gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEditShift(shift)}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => deleteShiftMutation.mutate(shift.id)}
+                                disabled={deleteShiftMutation.isPending}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </AppLayout>
   );
