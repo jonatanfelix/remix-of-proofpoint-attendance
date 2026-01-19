@@ -5,6 +5,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// ========================================
+// DEFAULT CREDENTIALS - GANTI SETELAH SETUP!
+// ========================================
+const DEFAULT_USERNAME = 'superadmin';
+const DEFAULT_PASSWORD = 'Admin123!';
+const DEFAULT_FULLNAME = 'Super Admin';
+// ========================================
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -43,14 +51,19 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Parse request body
-    const { username, password, fullName } = await req.json();
+    // Parse request body - use defaults if not provided
+    let username = DEFAULT_USERNAME;
+    let password = DEFAULT_PASSWORD;
+    let fullName = DEFAULT_FULLNAME;
 
-    if (!username || !password || !fullName) {
-      return new Response(
-        JSON.stringify({ error: 'Missing required fields: username, password, fullName' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    try {
+      const body = await req.json();
+      username = body.username || DEFAULT_USERNAME;
+      password = body.password || DEFAULT_PASSWORD;
+      fullName = body.fullName || DEFAULT_FULLNAME;
+    } catch {
+      // If no body or invalid JSON, use defaults
+      console.log('Using default credentials');
     }
 
     // Validate inputs
@@ -249,7 +262,12 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Admin berhasil dibuat! Silakan login dengan username dan password yang sudah diset.',
+        message: `Admin berhasil dibuat! Login dengan username: ${trimmedUsername}`,
+        credentials: {
+          username: trimmedUsername,
+          password: trimmedPassword,
+          note: 'GANTI PASSWORD SEGERA SETELAH LOGIN!'
+        },
         user: {
           id: newUserId,
           username: trimmedUsername,
