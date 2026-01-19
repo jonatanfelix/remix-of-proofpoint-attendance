@@ -167,6 +167,7 @@ const AdminDailyMonitor = () => {
           )
         `)
         .eq('is_active', true)
+        .eq('attendance_required', true)
         .order('full_name');
 
       if (error) throw error;
