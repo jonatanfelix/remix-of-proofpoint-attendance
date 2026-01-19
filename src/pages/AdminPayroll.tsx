@@ -35,8 +35,9 @@ import {
 import {
   Download, Calculator, Clock, Users,
   AlertTriangle, Loader2, FileSpreadsheet, Info,
-  ChevronDown, Shield, Banknote, Settings
+  ChevronDown, Shield, Banknote, Settings, FileText
 } from 'lucide-react';
+import { PayslipDialog } from '@/components/payroll/PayslipDialog';
 import { toast } from 'sonner';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, parseISO, differenceInMinutes, isWeekend } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
@@ -90,6 +91,7 @@ interface Holiday {
 
 interface CompanySettings {
   id: string;
+  name: string;
   work_start_time: string;
   grace_period_minutes: number;
   late_penalty_per_minute: number;
@@ -151,6 +153,7 @@ const AdminPayroll = () => {
   const [showPph21, setShowPph21] = useState(false);
   const [ptkpStatus, setPtkpStatus] = useState('TK/0');
   const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedPayslip, setSelectedPayslip] = useState<PayrollData | null>(null);
 
   // Check if user is admin
   const { data: userRole, isLoading: roleLoading } = useQuery({
@@ -962,7 +965,7 @@ const AdminPayroll = () => {
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
-                      <TableRow>
+                     <TableRow>
                         <TableHead>Nama</TableHead>
                         <TableHead className="text-right">Gaji Pokok</TableHead>
                         <TableHead className="text-center">Hadir</TableHead>
@@ -974,6 +977,7 @@ const AdminPayroll = () => {
                         {showPph21 && <TableHead className="text-right">PPh 21</TableHead>}
                         <TableHead className="text-right">Total Pot.</TableHead>
                         <TableHead className="text-right">Gaji Bersih</TableHead>
+                        <TableHead className="text-center">Slip</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1056,6 +1060,16 @@ const AdminPayroll = () => {
                               {formatCurrency(r.netSalary)}
                             </span>
                           </TableCell>
+                          <TableCell className="text-center">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setSelectedPayslip(r)}
+                              className="gap-1"
+                            >
+                              <FileText className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -1064,6 +1078,17 @@ const AdminPayroll = () => {
               )}
             </CardContent>
           </Card>
+
+          {/* Payslip Dialog */}
+          <PayslipDialog
+            open={!!selectedPayslip}
+            onOpenChange={(open) => !open && setSelectedPayslip(null)}
+            payrollData={selectedPayslip}
+            period={selectedMonth}
+            companyName={company?.name || 'Perusahaan'}
+            showBpjs={showBpjs}
+            showPph21={showPph21}
+          />
         </div>
       </div>
     </AppLayout>
