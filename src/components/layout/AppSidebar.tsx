@@ -102,21 +102,23 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar">
       {/* Header - Logo & Toggle */}
-      <SidebarHeader className="p-4 border-b border-sidebar-border">
-        <div className="flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-3">
+      <SidebarHeader className={cn("border-b border-sidebar-border", isCollapsed ? "p-2" : "p-4")}>
+        <div className={cn("flex items-center", isCollapsed ? "justify-center" : "justify-between")}>
+          <Link to="/" className="flex items-center gap-3 overflow-hidden">
             <div className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-sidebar-foreground shrink-0">
               <Clock className="h-5 w-5 text-sidebar-foreground" />
             </div>
-            {!isCollapsed && <span className="text-lg font-bold text-sidebar-foreground">GeoAttend</span>}
+            <span className={cn("text-lg font-bold text-sidebar-foreground whitespace-nowrap transition-opacity", isCollapsed ? "opacity-0 w-0 hidden" : "opacity-100")}>GeoAttend</span>
           </Link>
-          <button
-            onClick={toggleSidebar}
-            className="hidden md:flex p-1.5 text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 rounded-md transition-colors"
-            title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            {isCollapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-          </button>
+          {!isCollapsed && (
+            <button
+              onClick={toggleSidebar}
+              className="hidden md:flex p-1.5 text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 rounded-md transition-colors shrink-0"
+              title="Collapse sidebar"
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </SidebarHeader>
 
