@@ -11,6 +11,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -20,13 +28,26 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  Download, DollarSign, Calculator, Clock,
-  AlertTriangle, Loader2, FileSpreadsheet, Info
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import {
+  Download, Calculator, Clock, Users,
+  AlertTriangle, Loader2, FileSpreadsheet, Info,
+  ChevronDown, Shield, Banknote, Settings
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, parseISO, differenceInMinutes, differenceInHours, isWeekend } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, parseISO, differenceInMinutes, isWeekend } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
+import {
+  calculateBPJS,
+  calculatePPh21Monthly,
+  formatCurrency,
+  PTKP_VALUES,
+  type BPJSRates,
+} from '@/lib/payroll';
 
 interface Employee {
   id: string;
@@ -35,6 +56,7 @@ interface Employee {
   email: string;
   department: string | null;
   employee_type: 'office' | 'field';
+  attendance_required: boolean;
   shifts: {
     name: string;
     start_time: string;
@@ -64,6 +86,24 @@ interface Holiday {
   name: string;
 }
 
+interface CompanySettings {
+  id: string;
+  work_start_time: string;
+  grace_period_minutes: number;
+  late_penalty_per_minute: number;
+  standard_work_hours: number;
+  overtime_rate_per_hour: number;
+  early_leave_deduction_per_minute: number;
+  bpjs_kesehatan_employee_rate: number;
+  bpjs_kesehatan_employer_rate: number;
+  bpjs_tk_jht_employee_rate: number;
+  bpjs_tk_jht_employer_rate: number;
+  bpjs_tk_jp_employee_rate: number;
+  bpjs_tk_jp_employer_rate: number;
+  ptkp_status_default: string;
+  use_pph21_calculation: boolean;
+}
+
 interface PayrollData {
   employee: Employee;
   workingDays: number;
@@ -71,23 +111,42 @@ interface PayrollData {
   absentDays: number;
   lateDays: number;
   totalLateMinutes: number;
-  lateDeduction: number; // calculated penalty
+  lateDeduction: number;
+  earlyLeaveDays: number;
+  totalEarlyLeaveMinutes: number;
+  earlyLeaveDeduction: number;
   totalWorkHours: number;
   overtimeHours: number;
+  overtimeAmount: number;
   sickDays: number;
   leaveDays: number;
   permitDays: number;
+  // BPJS
+  bpjsKesehatanEmployee: number;
+  bpjsJhtEmployee: number;
+  bpjsJpEmployee: number;
+  totalBpjsEmployee: number;
+  // Tax
+  pph21: number;
+  // Totals
+  totalDeductions: number;
+  totalAdditions: number;
 }
 
-// Late penalty configuration (Now configurable via DB)
-// const LATE_PENALTY_PER_MINUTE = 1000; 
-// const STANDARD_WORK_HOURS = 8;
+const PTKP_OPTIONS = Object.keys(PTKP_VALUES);
 
 const AdminPayroll = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
   const [isExporting, setIsExporting] = useState(false);
+  
+  // Feature toggles for this session (preview)
+  const [showBpjs, setShowBpjs] = useState(false);
+  const [showPph21, setShowPph21] = useState(false);
+  const [baseSalary, setBaseSalary] = useState(5000000); // Default base salary for simulation
+  const [ptkpStatus, setPtkpStatus] = useState('TK/0');
+  const [detailOpen, setDetailOpen] = useState(false);
 
   // Check if user is admin
   const { data: userRole, isLoading: roleLoading } = useQuery({
@@ -132,11 +191,7 @@ const AdminPayroll = () => {
         .select('*')
         .limit(1)
         .maybeSingle();
-      return data as {
-        work_start_time: string;
-        late_penalty_per_minute: number;
-        standard_work_hours: number;
-      } | null;
+      return data as CompanySettings | null;
     },
     enabled: isAdminOrDeveloper,
   });
@@ -148,10 +203,11 @@ const AdminPayroll = () => {
       const { data, error } = await supabase
         .from('profiles')
         .select(`
-          id, user_id, full_name, email, department, employee_type,
+          id, user_id, full_name, email, department, employee_type, attendance_required,
           shifts (name, start_time, end_time)
         `)
         .eq('is_active', true)
+        .eq('attendance_required', true)
         .order('full_name');
 
       if (error) throw error;
@@ -219,11 +275,26 @@ const AdminPayroll = () => {
     enabled: isAdminOrDeveloper && !!dateRange,
   });
 
+  // BPJS Rates from company settings
+  const bpjsRates: BPJSRates = useMemo(() => ({
+    kesehatan_employee: company?.bpjs_kesehatan_employee_rate || 1,
+    kesehatan_employer: company?.bpjs_kesehatan_employer_rate || 4,
+    tk_jht_employee: company?.bpjs_tk_jht_employee_rate || 2,
+    tk_jht_employer: company?.bpjs_tk_jht_employer_rate || 3.7,
+    tk_jp_employee: company?.bpjs_tk_jp_employee_rate || 1,
+    tk_jp_employer: company?.bpjs_tk_jp_employer_rate || 2,
+  }), [company]);
+
   // Process payroll data
   const payrollData = useMemo<PayrollData[]>(() => {
     if (!employees || !dateRange) return [];
 
     const holidayDates = new Set(holidays?.map(h => h.date) || []);
+    const standardWorkHours = company?.standard_work_hours || 8;
+    const latePenaltyPerMinute = company?.late_penalty_per_minute || 0;
+    const earlyLeaveDeductionPerMinute = company?.early_leave_deduction_per_minute || 0;
+    const overtimeRatePerHour = company?.overtime_rate_per_hour || 0;
+    const gracePeriodMinutes = company?.grace_period_minutes || 0;
 
     return employees.map((emp) => {
       let workingDays = 0;
@@ -231,12 +302,10 @@ const AdminPayroll = () => {
       let absentDays = 0;
       let lateDays = 0;
       let totalLateMinutes = 0;
+      let earlyLeaveDays = 0;
+      let totalEarlyLeaveMinutes = 0;
       let totalWorkHours = 0;
       let overtimeHours = 0;
-      let lateDeduction = 0;
-
-      const standardWorkHours = company?.standard_work_hours || 8;
-      const latePenaltyPerMinute = company?.late_penalty_per_minute || 1000;
       let sickDays = 0;
       let leaveDays = 0;
       let permitDays = 0;
@@ -302,20 +371,61 @@ const AdminPayroll = () => {
           if (hoursWorked > standardWorkHours) {
             overtimeHours += hoursWorked - standardWorkHours;
           }
+
+          // Check early leave (for office employees)
+          if (emp.employee_type === 'office') {
+            const expectedEnd = new Date(lastClockOut);
+            expectedEnd.setHours(endHour, endMin, 0, 0);
+            if (lastClockOut < expectedEnd) {
+              earlyLeaveDays++;
+              totalEarlyLeaveMinutes += differenceInMinutes(expectedEnd, lastClockOut);
+            }
+          }
         }
 
-        // Check lateness (only for office employees)
+        // Check lateness (only for office employees, after grace period)
         if (emp.employee_type === 'office') {
           const firstClockIn = new Date(clockIns[0].recorded_at);
           const workStart = new Date(firstClockIn);
           workStart.setHours(startHour, startMin, 0, 0);
 
-          if (firstClockIn > workStart) {
+          // Add grace period
+          const graceEnd = new Date(workStart.getTime() + gracePeriodMinutes * 60 * 1000);
+
+          if (firstClockIn > graceEnd) {
             lateDays++;
-            totalLateMinutes += differenceInMinutes(firstClockIn, workStart);
+            totalLateMinutes += differenceInMinutes(firstClockIn, workStart) - gracePeriodMinutes;
           }
         }
       });
+
+      // Calculate deductions
+      const lateDeduction = Math.max(0, totalLateMinutes) * latePenaltyPerMinute;
+      const earlyLeaveDeduction = Math.max(0, totalEarlyLeaveMinutes) * earlyLeaveDeductionPerMinute;
+      const overtimeAmount = Math.round(overtimeHours * 10) / 10 * overtimeRatePerHour;
+
+      // Calculate BPJS (optional)
+      let bpjsKesehatanEmployee = 0;
+      let bpjsJhtEmployee = 0;
+      let bpjsJpEmployee = 0;
+      let totalBpjsEmployee = 0;
+
+      if (showBpjs) {
+        const bpjs = calculateBPJS(baseSalary, bpjsRates);
+        bpjsKesehatanEmployee = bpjs.employee.kesehatan;
+        bpjsJhtEmployee = bpjs.employee.jht;
+        bpjsJpEmployee = bpjs.employee.jp;
+        totalBpjsEmployee = bpjs.employee.total;
+      }
+
+      // Calculate PPh 21 (optional)
+      let pph21 = 0;
+      if (showPph21) {
+        pph21 = calculatePPh21Monthly(baseSalary, ptkpStatus);
+      }
+
+      const totalDeductions = lateDeduction + earlyLeaveDeduction + totalBpjsEmployee + pph21;
+      const totalAdditions = overtimeAmount;
 
       return {
         employee: emp,
@@ -323,16 +433,27 @@ const AdminPayroll = () => {
         presentDays,
         absentDays,
         lateDays,
-        totalLateMinutes,
-        lateDeduction: totalLateMinutes * latePenaltyPerMinute,
+        totalLateMinutes: Math.max(0, totalLateMinutes),
+        lateDeduction,
+        earlyLeaveDays,
+        totalEarlyLeaveMinutes: Math.max(0, totalEarlyLeaveMinutes),
+        earlyLeaveDeduction,
         totalWorkHours: Math.round(totalWorkHours * 10) / 10,
         overtimeHours: Math.round(overtimeHours * 10) / 10,
+        overtimeAmount,
         sickDays,
         leaveDays,
         permitDays,
+        bpjsKesehatanEmployee,
+        bpjsJhtEmployee,
+        bpjsJpEmployee,
+        totalBpjsEmployee,
+        pph21,
+        totalDeductions,
+        totalAdditions,
       };
     });
-  }, [employees, dateRange, attendance, leaves, holidays, company]);
+  }, [employees, dateRange, attendance, leaves, holidays, company, showBpjs, showPph21, baseSalary, ptkpStatus, bpjsRates]);
 
   // Export to Excel (Payroll Format)
   const exportPayrollXLSX = async () => {
@@ -344,63 +465,122 @@ const AdminPayroll = () => {
       const exportDate = format(new Date(), 'dd-MM-yyyy HH:mm:ss');
       const monthLabel = format(parseISO(`${selectedMonth}-01`), 'MMMM yyyy', { locale: idLocale });
 
+      // Build dynamic headers based on options
+      const headers = [
+        'No', 'Nama Karyawan', 'Departemen', 'Tipe',
+        'Hari Kerja', 'Hadir', 'Alpa',
+        'Telat (hari)', 'Telat (menit)', 'Potongan Telat',
+        'Pulang Awal (hari)', 'Pulang Awal (menit)', 'Potongan Pulang Awal',
+        'Jam Kerja', 'Jam Lembur', 'Uang Lembur',
+        'Cuti', 'Sakit', 'Izin',
+      ];
+
+      if (showBpjs) {
+        headers.push('BPJS Kesehatan', 'BPJS JHT', 'BPJS JP', 'Total BPJS');
+      }
+
+      if (showPph21) {
+        headers.push('PPh 21');
+      }
+
+      headers.push('Total Potongan', 'Total Tambahan');
+
       const wsData = [
         [`Data Payroll - GeoAttend`],
         [`Periode: ${monthLabel}`],
         [`Diekspor oleh: ${exportedBy}`],
         [`Waktu export: ${exportDate}`],
-        [`Catatan: Potongan telat = Rp ${company?.late_penalty_per_minute?.toLocaleString('id-ID') || '1.000'}/menit`],
         [],
-        [
-          'No', 'Nama Karyawan', 'Departemen', 'Tipe',
-          'Hari Kerja', 'Hadir', 'Alpa',
-          'Telat (hari)', 'Total Telat (menit)', 'Potongan Telat (Rp)',
-          'Total Jam Kerja', 'Jam Lembur',
-          'Cuti', 'Sakit', 'Izin'
-        ],
-        ...payrollData.map((r, idx) => [
-          idx + 1,
-          r.employee.full_name,
-          r.employee.department || '-',
-          r.employee.employee_type === 'office' ? 'Kantor' : 'Lapangan',
-          r.workingDays,
-          r.presentDays,
-          r.absentDays,
-          r.lateDays,
-          r.totalLateMinutes,
-          r.lateDeduction,
-          r.totalWorkHours,
-          r.overtimeHours,
-          r.leaveDays,
-          r.sickDays,
-          r.permitDays,
-        ]),
+        [`Pengaturan:`],
+        [`- Potongan telat: ${formatCurrency(company?.late_penalty_per_minute || 0)}/menit (setelah toleransi ${company?.grace_period_minutes || 0} menit)`],
+        [`- Potongan pulang awal: ${formatCurrency(company?.early_leave_deduction_per_minute || 0)}/menit`],
+        [`- Uang lembur: ${formatCurrency(company?.overtime_rate_per_hour || 0)}/jam`],
+        showBpjs ? [`- BPJS aktif dengan gaji simulasi: ${formatCurrency(baseSalary)}`] : [],
+        showPph21 ? [`- PPh 21 aktif dengan status PTKP: ${ptkpStatus}`] : [],
         [],
-        ['', '', '', 'TOTAL',
-          payrollData.reduce((s, r) => s + r.workingDays, 0),
-          payrollData.reduce((s, r) => s + r.presentDays, 0),
-          payrollData.reduce((s, r) => s + r.absentDays, 0),
-          payrollData.reduce((s, r) => s + r.lateDays, 0),
-          payrollData.reduce((s, r) => s + r.totalLateMinutes, 0),
-          payrollData.reduce((s, r) => s + r.lateDeduction, 0),
-          payrollData.reduce((s, r) => s + r.totalWorkHours, 0),
-          payrollData.reduce((s, r) => s + r.overtimeHours, 0),
-          payrollData.reduce((s, r) => s + r.leaveDays, 0),
-          payrollData.reduce((s, r) => s + r.sickDays, 0),
-          payrollData.reduce((s, r) => s + r.permitDays, 0),
-        ],
-      ];
+        headers,
+        ...payrollData.map((r, idx) => {
+          const row: (string | number)[] = [
+            idx + 1,
+            r.employee.full_name,
+            r.employee.department || '-',
+            r.employee.employee_type === 'office' ? 'Kantor' : 'Lapangan',
+            r.workingDays,
+            r.presentDays,
+            r.absentDays,
+            r.lateDays,
+            r.totalLateMinutes,
+            r.lateDeduction,
+            r.earlyLeaveDays,
+            r.totalEarlyLeaveMinutes,
+            r.earlyLeaveDeduction,
+            r.totalWorkHours,
+            r.overtimeHours,
+            r.overtimeAmount,
+            r.leaveDays,
+            r.sickDays,
+            r.permitDays,
+          ];
+
+          if (showBpjs) {
+            row.push(r.bpjsKesehatanEmployee, r.bpjsJhtEmployee, r.bpjsJpEmployee, r.totalBpjsEmployee);
+          }
+
+          if (showPph21) {
+            row.push(r.pph21);
+          }
+
+          row.push(r.totalDeductions, r.totalAdditions);
+          return row;
+        }),
+        [],
+        // Totals row
+        (() => {
+          const totalsRow: (string | number)[] = [
+            '', '', '', 'TOTAL',
+            payrollData.reduce((s, r) => s + r.workingDays, 0),
+            payrollData.reduce((s, r) => s + r.presentDays, 0),
+            payrollData.reduce((s, r) => s + r.absentDays, 0),
+            payrollData.reduce((s, r) => s + r.lateDays, 0),
+            payrollData.reduce((s, r) => s + r.totalLateMinutes, 0),
+            payrollData.reduce((s, r) => s + r.lateDeduction, 0),
+            payrollData.reduce((s, r) => s + r.earlyLeaveDays, 0),
+            payrollData.reduce((s, r) => s + r.totalEarlyLeaveMinutes, 0),
+            payrollData.reduce((s, r) => s + r.earlyLeaveDeduction, 0),
+            payrollData.reduce((s, r) => s + r.totalWorkHours, 0),
+            payrollData.reduce((s, r) => s + r.overtimeHours, 0),
+            payrollData.reduce((s, r) => s + r.overtimeAmount, 0),
+            payrollData.reduce((s, r) => s + r.leaveDays, 0),
+            payrollData.reduce((s, r) => s + r.sickDays, 0),
+            payrollData.reduce((s, r) => s + r.permitDays, 0),
+          ];
+
+          if (showBpjs) {
+            totalsRow.push(
+              payrollData.reduce((s, r) => s + r.bpjsKesehatanEmployee, 0),
+              payrollData.reduce((s, r) => s + r.bpjsJhtEmployee, 0),
+              payrollData.reduce((s, r) => s + r.bpjsJpEmployee, 0),
+              payrollData.reduce((s, r) => s + r.totalBpjsEmployee, 0)
+            );
+          }
+
+          if (showPph21) {
+            totalsRow.push(payrollData.reduce((s, r) => s + r.pph21, 0));
+          }
+
+          totalsRow.push(
+            payrollData.reduce((s, r) => s + r.totalDeductions, 0),
+            payrollData.reduce((s, r) => s + r.totalAdditions, 0)
+          );
+          return totalsRow;
+        })(),
+      ].filter(row => row.length > 0);
 
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.aoa_to_sheet(wsData);
 
-      ws['!cols'] = [
-        { wch: 5 }, { wch: 25 }, { wch: 15 }, { wch: 10 },
-        { wch: 12 }, { wch: 8 }, { wch: 8 },
-        { wch: 12 }, { wch: 18 }, { wch: 18 },
-        { wch: 15 }, { wch: 12 },
-        { wch: 8 }, { wch: 8 }, { wch: 8 },
-      ];
+      // Set column widths
+      ws['!cols'] = Array(headers.length).fill({ wch: 15 });
 
       XLSX.utils.book_append_sheet(wb, ws, 'Payroll Data');
 
@@ -418,13 +598,14 @@ const AdminPayroll = () => {
         p_details: {
           month: selectedMonth,
           employee_count: payrollData.length,
-          total_deduction: payrollData.reduce((s, r) => s + r.lateDeduction, 0),
+          include_bpjs: showBpjs,
+          include_pph21: showPph21,
         },
         p_ip_address: null,
         p_user_agent: navigator.userAgent,
       });
 
-      // Robust download handling with custom utility
+      // Download
       const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
       const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       downloadBlob(blob, `${fileName}.xlsx`);
@@ -446,7 +627,13 @@ const AdminPayroll = () => {
       totalEmployees: payrollData.length,
       totalWorkHours: Math.round(payrollData.reduce((s, r) => s + r.totalWorkHours, 0)),
       totalOvertimeHours: Math.round(payrollData.reduce((s, r) => s + r.overtimeHours, 0) * 10) / 10,
-      totalDeduction: payrollData.reduce((s, r) => s + r.lateDeduction, 0),
+      totalLateDeduction: payrollData.reduce((s, r) => s + r.lateDeduction, 0),
+      totalEarlyLeaveDeduction: payrollData.reduce((s, r) => s + r.earlyLeaveDeduction, 0),
+      totalOvertimeAmount: payrollData.reduce((s, r) => s + r.overtimeAmount, 0),
+      totalBpjs: payrollData.reduce((s, r) => s + r.totalBpjsEmployee, 0),
+      totalPph21: payrollData.reduce((s, r) => s + r.pph21, 0),
+      totalDeductions: payrollData.reduce((s, r) => s + r.totalDeductions, 0),
+      totalAdditions: payrollData.reduce((s, r) => s + r.totalAdditions, 0),
     };
   }, [payrollData]);
 
@@ -486,7 +673,7 @@ const AdminPayroll = () => {
             <div>
               <h1 className="text-2xl font-bold">Integrasi Payroll</h1>
               <p className="text-muted-foreground">
-                Export data kehadiran siap hitung penggajian
+                Data kehadiran lengkap untuk perhitungan gaji
               </p>
             </div>
             <Button
@@ -499,7 +686,7 @@ const AdminPayroll = () => {
               ) : (
                 <FileSpreadsheet className="h-4 w-4 mr-2" />
               )}
-              Export Payroll
+              Export Excel
             </Button>
           </div>
 
@@ -509,25 +696,29 @@ const AdminPayroll = () => {
               <div className="flex items-start gap-3">
                 <Info className="h-5 w-5 text-primary mt-0.5" />
                 <div className="text-sm">
-                  <p className="font-medium">Format Payroll Ready</p>
+                  <p className="font-medium">Pengaturan di Admin → Pengaturan</p>
                   <p className="text-muted-foreground">
-                    Data mencakup: hari kerja, kehadiran, keterlambatan, potongan, jam kerja, dan lembur.
-                    Siap diimpor ke sistem penggajian.
+                    Semua rate (potongan telat, pulang awal, lembur, BPJS) bisa diatur di halaman Pengaturan.
+                    Aktifkan opsi BPJS dan PPh 21 di bawah untuk melihat simulasi perhitungan.
                   </p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Filter */}
+          {/* Filters & Options */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Periode Payroll</CardTitle>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Settings className="h-5 w-5" />
+                Pengaturan Periode & Opsi
+              </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="flex flex-col sm:flex-row gap-4 items-end">
+            <CardContent className="space-y-4">
+              {/* Period */}
+              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-end">
                 <div className="space-y-2">
-                  <Label>Bulan</Label>
+                  <Label>Periode Bulan</Label>
                   <Input
                     type="month"
                     value={selectedMonth}
@@ -535,8 +726,103 @@ const AdminPayroll = () => {
                     className="w-full sm:w-48"
                   />
                 </div>
-                <div className="text-sm text-muted-foreground">
-                  Potongan telat: Rp {(company?.late_penalty_per_minute || 1000).toLocaleString('id-ID')}/menit
+              </div>
+
+              {/* BPJS & PPh21 Toggles */}
+              <Collapsible open={detailOpen} onOpenChange={setDetailOpen}>
+                <CollapsibleTrigger asChild>
+                  <Button variant="outline" className="w-full justify-between border-2 border-foreground">
+                    <span className="flex items-center gap-2">
+                      <Calculator className="h-4 w-4" />
+                      Opsi Perhitungan BPJS & Pajak (Opsional)
+                    </span>
+                    <ChevronDown className={`h-4 w-4 transition-transform ${detailOpen ? 'rotate-180' : ''}`} />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-4 space-y-4">
+                  {/* BPJS Toggle */}
+                  <div className="flex items-center justify-between p-4 rounded-lg border-2 border-foreground bg-muted/30">
+                    <div className="flex items-center gap-3">
+                      <Shield className="h-5 w-5 text-blue-600" />
+                      <div>
+                        <Label className="text-base">Hitung BPJS</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Kesehatan + Ketenagakerjaan (JHT + JP)
+                        </p>
+                      </div>
+                    </div>
+                    <Switch checked={showBpjs} onCheckedChange={setShowBpjs} />
+                  </div>
+
+                  {/* PPh21 Toggle */}
+                  <div className="flex items-center justify-between p-4 rounded-lg border-2 border-foreground bg-muted/30">
+                    <div className="flex items-center gap-3">
+                      <Banknote className="h-5 w-5 text-green-600" />
+                      <div>
+                        <Label className="text-base">Hitung PPh 21</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Pajak penghasilan karyawan
+                        </p>
+                      </div>
+                    </div>
+                    <Switch checked={showPph21} onCheckedChange={setShowPph21} />
+                  </div>
+
+                  {/* Simulation inputs */}
+                  {(showBpjs || showPph21) && (
+                    <div className="p-4 rounded-lg border-2 border-primary/50 bg-primary/5 space-y-4">
+                      <p className="text-sm font-medium text-primary">
+                        Simulasi Perhitungan (gaji sama untuk semua karyawan)
+                      </p>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label>Gaji Pokok (Rp)</Label>
+                          <Input
+                            type="number"
+                            value={baseSalary}
+                            onChange={(e) => setBaseSalary(Number(e.target.value))}
+                            className="border-2 border-foreground"
+                          />
+                        </div>
+                        {showPph21 && (
+                          <div className="space-y-2">
+                            <Label>Status PTKP</Label>
+                            <Select value={ptkpStatus} onValueChange={setPtkpStatus}>
+                              <SelectTrigger className="border-2 border-foreground">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {PTKP_OPTIONS.map((status) => (
+                                  <SelectItem key={status} value={status}>
+                                    {status}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        * Untuk perhitungan riil, integrasikan dengan sistem HR yang menyimpan gaji per karyawan.
+                      </p>
+                    </div>
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
+
+              {/* Current settings summary */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-muted-foreground">
+                <div className="p-2 rounded bg-muted">
+                  <span className="font-medium">Toleransi:</span> {company?.grace_period_minutes || 0} menit
+                </div>
+                <div className="p-2 rounded bg-muted">
+                  <span className="font-medium">Denda telat:</span> {formatCurrency(company?.late_penalty_per_minute || 0)}/mnt
+                </div>
+                <div className="p-2 rounded bg-muted">
+                  <span className="font-medium">Pulang awal:</span> {formatCurrency(company?.early_leave_deduction_per_minute || 0)}/mnt
+                </div>
+                <div className="p-2 rounded bg-muted">
+                  <span className="font-medium">Lembur:</span> {formatCurrency(company?.overtime_rate_per_hour || 0)}/jam
                 </div>
               </div>
             </CardContent>
@@ -548,7 +834,7 @@ const AdminPayroll = () => {
               <Card>
                 <CardContent className="pt-4">
                   <div className="flex items-center gap-3">
-                    <DollarSign className="h-5 w-5 text-primary" />
+                    <Users className="h-5 w-5 text-primary" />
                     <div>
                       <p className="text-2xl font-bold">{summaryStats.totalEmployees}</p>
                       <p className="text-xs text-muted-foreground">Karyawan</p>
@@ -570,10 +856,12 @@ const AdminPayroll = () => {
               <Card>
                 <CardContent className="pt-4">
                   <div className="flex items-center gap-3">
-                    <Calculator className="h-5 w-5 text-blue-600" />
+                    <AlertTriangle className="h-5 w-5 text-destructive" />
                     <div>
-                      <p className="text-2xl font-bold">{summaryStats.totalOvertimeHours}j</p>
-                      <p className="text-xs text-muted-foreground">Total Lembur</p>
+                      <p className="text-lg font-bold text-destructive">
+                        {formatCurrency(summaryStats.totalDeductions)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Total Potongan</p>
                     </div>
                   </div>
                 </CardContent>
@@ -581,17 +869,60 @@ const AdminPayroll = () => {
               <Card>
                 <CardContent className="pt-4">
                   <div className="flex items-center gap-3">
-                    <AlertTriangle className="h-5 w-5 text-destructive" />
+                    <Calculator className="h-5 w-5 text-blue-600" />
                     <div>
-                      <p className="text-lg font-bold">
-                        Rp {summaryStats.totalDeduction.toLocaleString('id-ID')}
+                      <p className="text-lg font-bold text-green-600">
+                        {formatCurrency(summaryStats.totalAdditions)}
                       </p>
-                      <p className="text-xs text-muted-foreground">Total Potongan</p>
+                      <p className="text-xs text-muted-foreground">Total Tambahan</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
             </div>
+          )}
+
+          {/* Breakdown */}
+          {summaryStats && (showBpjs || showPph21 || summaryStats.totalLateDeduction > 0 || summaryStats.totalEarlyLeaveDeduction > 0) && (
+            <Card className="bg-muted/30">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Rincian Potongan & Tambahan</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+                  {summaryStats.totalLateDeduction > 0 && (
+                    <div>
+                      <p className="text-muted-foreground">Potongan Telat</p>
+                      <p className="font-medium text-destructive">{formatCurrency(summaryStats.totalLateDeduction)}</p>
+                    </div>
+                  )}
+                  {summaryStats.totalEarlyLeaveDeduction > 0 && (
+                    <div>
+                      <p className="text-muted-foreground">Potongan Pulang Awal</p>
+                      <p className="font-medium text-destructive">{formatCurrency(summaryStats.totalEarlyLeaveDeduction)}</p>
+                    </div>
+                  )}
+                  {showBpjs && (
+                    <div>
+                      <p className="text-muted-foreground">BPJS (Karyawan)</p>
+                      <p className="font-medium text-destructive">{formatCurrency(summaryStats.totalBpjs)}</p>
+                    </div>
+                  )}
+                  {showPph21 && (
+                    <div>
+                      <p className="text-muted-foreground">PPh 21</p>
+                      <p className="font-medium text-destructive">{formatCurrency(summaryStats.totalPph21)}</p>
+                    </div>
+                  )}
+                  {summaryStats.totalOvertimeAmount > 0 && (
+                    <div>
+                      <p className="text-muted-foreground">Uang Lembur</p>
+                      <p className="font-medium text-green-600">{formatCurrency(summaryStats.totalOvertimeAmount)}</p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           {/* Table */}
@@ -600,6 +931,9 @@ const AdminPayroll = () => {
               <CardTitle className="text-lg">
                 Data Payroll {format(parseISO(`${selectedMonth}-01`), 'MMMM yyyy', { locale: idLocale })}
               </CardTitle>
+              <CardDescription>
+                Hanya menampilkan karyawan dengan absensi wajib
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {isLoading ? (
@@ -614,24 +948,30 @@ const AdminPayroll = () => {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Nama</TableHead>
-                        <TableHead className="text-center">Hari Kerja</TableHead>
                         <TableHead className="text-center">Hadir</TableHead>
                         <TableHead className="text-center">Alpa</TableHead>
                         <TableHead className="text-center">Telat</TableHead>
-                        <TableHead className="text-right">Potongan</TableHead>
+                        <TableHead className="text-right">Pot. Telat</TableHead>
                         <TableHead className="text-center">Jam Kerja</TableHead>
                         <TableHead className="text-center">Lembur</TableHead>
+                        {showBpjs && <TableHead className="text-right">BPJS</TableHead>}
+                        {showPph21 && <TableHead className="text-right">PPh 21</TableHead>}
+                        <TableHead className="text-right">Total Pot.</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {payrollData.map((r) => (
                         <TableRow key={r.employee.id}>
                           <TableCell className="font-medium">
-                            {r.employee.full_name}
+                            <div>
+                              <p>{r.employee.full_name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {r.employee.employee_type === 'office' ? 'Kantor' : 'Lapangan'}
+                              </p>
+                            </div>
                           </TableCell>
-                          <TableCell className="text-center">{r.workingDays}</TableCell>
                           <TableCell className="text-center">
-                            <Badge variant="default">{r.presentDays}</Badge>
+                            <Badge variant="default">{r.presentDays}/{r.workingDays}</Badge>
                           </TableCell>
                           <TableCell className="text-center">
                             {r.absentDays > 0 ? (
@@ -652,7 +992,7 @@ const AdminPayroll = () => {
                           <TableCell className="text-right">
                             {r.lateDeduction > 0 ? (
                               <span className="text-destructive font-medium">
-                                Rp {r.lateDeduction.toLocaleString('id-ID')}
+                                {formatCurrency(r.lateDeduction)}
                               </span>
                             ) : (
                               <span className="text-muted-foreground">-</span>
@@ -664,6 +1004,25 @@ const AdminPayroll = () => {
                               <Badge variant="outline" className="bg-green-50 text-green-700">
                                 +{r.overtimeHours}j
                               </Badge>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+                          {showBpjs && (
+                            <TableCell className="text-right text-sm">
+                              {formatCurrency(r.totalBpjsEmployee)}
+                            </TableCell>
+                          )}
+                          {showPph21 && (
+                            <TableCell className="text-right text-sm">
+                              {formatCurrency(r.pph21)}
+                            </TableCell>
+                          )}
+                          <TableCell className="text-right">
+                            {r.totalDeductions > 0 ? (
+                              <span className="text-destructive font-medium">
+                                {formatCurrency(r.totalDeductions)}
+                              </span>
                             ) : (
                               <span className="text-muted-foreground">-</span>
                             )}

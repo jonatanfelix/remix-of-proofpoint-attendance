@@ -8,10 +8,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { getCurrentPosition } from '@/lib/geolocation';
 import {
   MapPin, Save, Building, Clock, Target, Loader2, Navigation,
-  Plus, Trash2, Edit, Check, X
+  Plus, Trash2, Edit, Check, X, Shield, Banknote
 } from 'lucide-react';
 import { toast } from 'sonner';
 import L from 'leaflet';
@@ -861,6 +869,171 @@ const AdminSettings = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* BPJS Configuration */}
+        <Card className="border-2 border-foreground lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              Konfigurasi BPJS (Opsional)
+            </CardTitle>
+            <CardDescription>
+              Rate potongan BPJS untuk karyawan dan perusahaan dalam persen (%)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {/* BPJS Kesehatan */}
+              <div className="p-4 rounded-lg border-2 border-foreground bg-blue-50/50 dark:bg-blue-950/30 space-y-3">
+                <p className="font-medium text-blue-700 dark:text-blue-300">BPJS Kesehatan</p>
+                <div className="space-y-2">
+                  <Label htmlFor="bpjs-kes-emp" className="text-sm">Karyawan (%)</Label>
+                  <Input
+                    id="bpjs-kes-emp"
+                    type="number"
+                    step="0.1"
+                    min={0}
+                    max={10}
+                    value={bpjsKesehatanEmployee}
+                    onChange={(e) => setBpjsKesehatanEmployee(Number(e.target.value))}
+                    className="border-2 border-foreground"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bpjs-kes-er" className="text-sm">Perusahaan (%)</Label>
+                  <Input
+                    id="bpjs-kes-er"
+                    type="number"
+                    step="0.1"
+                    min={0}
+                    max={10}
+                    value={bpjsKesehatanEmployer}
+                    onChange={(e) => setBpjsKesehatanEmployer(Number(e.target.value))}
+                    className="border-2 border-foreground"
+                  />
+                </div>
+              </div>
+
+              {/* BPJS TK JHT */}
+              <div className="p-4 rounded-lg border-2 border-foreground bg-green-50/50 dark:bg-green-950/30 space-y-3">
+                <p className="font-medium text-green-700 dark:text-green-300">BPJS TK - JHT</p>
+                <div className="space-y-2">
+                  <Label htmlFor="bpjs-jht-emp" className="text-sm">Karyawan (%)</Label>
+                  <Input
+                    id="bpjs-jht-emp"
+                    type="number"
+                    step="0.1"
+                    min={0}
+                    max={10}
+                    value={bpjsTkJhtEmployee}
+                    onChange={(e) => setBpjsTkJhtEmployee(Number(e.target.value))}
+                    className="border-2 border-foreground"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bpjs-jht-er" className="text-sm">Perusahaan (%)</Label>
+                  <Input
+                    id="bpjs-jht-er"
+                    type="number"
+                    step="0.1"
+                    min={0}
+                    max={10}
+                    value={bpjsTkJhtEmployer}
+                    onChange={(e) => setBpjsTkJhtEmployer(Number(e.target.value))}
+                    className="border-2 border-foreground"
+                  />
+                </div>
+              </div>
+
+              {/* BPJS TK JP */}
+              <div className="p-4 rounded-lg border-2 border-foreground bg-purple-50/50 dark:bg-purple-950/30 space-y-3">
+                <p className="font-medium text-purple-700 dark:text-purple-300">BPJS TK - JP</p>
+                <div className="space-y-2">
+                  <Label htmlFor="bpjs-jp-emp" className="text-sm">Karyawan (%)</Label>
+                  <Input
+                    id="bpjs-jp-emp"
+                    type="number"
+                    step="0.1"
+                    min={0}
+                    max={10}
+                    value={bpjsTkJpEmployee}
+                    onChange={(e) => setBpjsTkJpEmployee(Number(e.target.value))}
+                    className="border-2 border-foreground"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bpjs-jp-er" className="text-sm">Perusahaan (%)</Label>
+                  <Input
+                    id="bpjs-jp-er"
+                    type="number"
+                    step="0.1"
+                    min={0}
+                    max={10}
+                    value={bpjsTkJpEmployer}
+                    onChange={(e) => setBpjsTkJpEmployer(Number(e.target.value))}
+                    className="border-2 border-foreground"
+                  />
+                </div>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Default: Kesehatan (1%/4%), JHT (2%/3.7%), JP (1%/2%). Isi 0 jika tidak menggunakan.
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Tax Configuration */}
+        <Card className="border-2 border-foreground lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Banknote className="h-5 w-5" />
+              Konfigurasi Pajak PPh 21 (Opsional)
+            </CardTitle>
+            <CardDescription>
+              Pengaturan default pajak penghasilan karyawan
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="ptkp-default">Status PTKP Default</Label>
+                <Select value={ptkpDefault} onValueChange={setPtkpDefault}>
+                  <SelectTrigger id="ptkp-default" className="border-2 border-foreground">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="TK/0">TK/0 - Tidak Kawin, 0 Tanggungan</SelectItem>
+                    <SelectItem value="TK/1">TK/1 - Tidak Kawin, 1 Tanggungan</SelectItem>
+                    <SelectItem value="TK/2">TK/2 - Tidak Kawin, 2 Tanggungan</SelectItem>
+                    <SelectItem value="TK/3">TK/3 - Tidak Kawin, 3 Tanggungan</SelectItem>
+                    <SelectItem value="K/0">K/0 - Kawin, 0 Tanggungan</SelectItem>
+                    <SelectItem value="K/1">K/1 - Kawin, 1 Tanggungan</SelectItem>
+                    <SelectItem value="K/2">K/2 - Kawin, 2 Tanggungan</SelectItem>
+                    <SelectItem value="K/3">K/3 - Kawin, 3 Tanggungan</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Digunakan saat simulasi PPh 21 di halaman Payroll
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between p-4 rounded-lg border-2 border-foreground bg-muted/30">
+                <div className="space-y-1">
+                  <Label className="text-base">Aktifkan PPh 21 Default</Label>
+                  <p className="text-sm text-muted-foreground">
+                    {usePph21
+                      ? 'PPh 21 akan dihitung otomatis di payroll'
+                      : 'PPh 21 tidak dihitung (bisa diaktifkan manual di Payroll)'}
+                  </p>
+                </div>
+                <Switch
+                  checked={usePph21}
+                  onCheckedChange={setUsePph21}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Shift Management */}
         <Card className="border-2 border-foreground">
