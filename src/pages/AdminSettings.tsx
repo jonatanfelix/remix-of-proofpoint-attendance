@@ -110,6 +110,7 @@ const AdminSettings = () => {
 
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [mapReady, setMapReady] = useState(false);
+  const [activeTab, setActiveTab] = useState('general');
 
   // Map refs
   const mapRef = useRef<HTMLDivElement>(null);
@@ -571,6 +572,16 @@ const AdminSettings = () => {
     }
   }, [radius]);
 
+  // Invalidate map size when switching to location tab
+  useEffect(() => {
+    if (activeTab === 'location' && mapInstanceRef.current) {
+      // Small delay to ensure the tab content is visible
+      setTimeout(() => {
+        mapInstanceRef.current?.invalidateSize();
+      }, 100);
+    }
+  }, [activeTab]);
+
   // Loading state
   if (roleLoading || companyLoading) {
     return (
@@ -609,7 +620,7 @@ const AdminSettings = () => {
           </Button>
         </div>
 
-        <Tabs defaultValue="general" className="space-y-6">
+        <Tabs defaultValue="general" value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto">
             <TabsTrigger value="general" className="flex items-center gap-2 py-3">
               <Building className="h-4 w-4" />
