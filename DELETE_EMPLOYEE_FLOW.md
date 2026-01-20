@@ -141,15 +141,116 @@ supabase/functions/delete-user/index.ts
 
 Ketika user dihapus dari `auth.users`:
 
-| Tabel | Aksi | Catatan |
-|-------|------|---------|
-| `auth.users` | DELETED | Primary deletion |
-| `profiles` | CASCADE DELETE* | Jika FK dengan ON DELETE CASCADE |
-| `user_roles` | CASCADE DELETE* | Jika FK dengan ON DELETE CASCADE |
-| `attendance_records` | TETAP ADA | Tidak ada FK cascade, data historis tetap |
-| `leave_requests` | TETAP ADA | Tidak ada FK cascade, data historis tetap |
+| Tabel | Aksi | FK Constraint | Catatan |
+|-------|------|---------------|---------|
+| `auth.users` | **DELETED** | - | Primary deletion oleh Supabase Admin API |
+| `profiles` | **CASCADE DELETE** | `ON DELETE CASCADE` | Otomatis terhapus |
+| `user_roles` | **CASCADE DELETE** | `ON DELETE CASCADE` | Otomatis terhapus |
+| `attendance_records` | **CASCADE DELETE** | `ON DELETE CASCADE` | Otomatis terhapus |
+| `leave_requests` | **CASCADE DELETE** | `ON DELETE CASCADE` | Otomatis terhapus |
 
-*Tergantung konfigurasi Foreign Key di database
+---
+
+## 🗄️ SQL Flow - Foreign Key Constraints
+
+### Struktur Foreign Key di Database
+
+```sql
+-- profiles table
+FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
+
+-- user_roles table  
+FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
+
+-- attendance_records table
+FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
+FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE SET NULL
+
+-- leave_requests table
+FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
+FOREIGN KEY (reviewed_by) REFERENCES auth.users(id)  -- NO ACTION (default)
+```
+
+### Diagram Cascade Delete
+
+```
+                    ┌─────────────────┐
+                    │   auth.users    │
+                    │  (PRIMARY)      │
+                    └────────┬────────┘
+                             │
+          ┌──────────────────┼──────────────────┬──────────────────┐
+          │ ON DELETE        │ ON DELETE        │ ON DELETE        │
+          │ CASCADE          │ CASCADE          │ CASCADE          │
+          ▼                  ▼                  ▼                  ▼
+┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+│    profiles     │ │   user_roles    │ │attendance_records│ │ leave_requests  │
+│                 │ │                 │ │                 │ │                 │
+│ user_id (FK) ───┘ │ user_id (FK) ───┘ │ user_id (FK) ───┘ │ user_id (FK) ───┘
+│ company_id (FK)   │                   │ location_id (FK)  │ reviewed_by(FK)* │
+│ shift_id (FK)     │                   │                   │                  │
+└─────────────────┘ └─────────────────┘ └─────────────────┘ └─────────────────┘
+
+* reviewed_by tidak CASCADE - jika admin yang review dihapus, 
+  leave_requests TETAP ADA tapi reviewed_by jadi NULL constraint violation
+```
+
+### SQL Execution Order (Internal PostgreSQL)
+
+Ketika `supabaseAdmin.auth.admin.deleteUser(userId)` dipanggil:
+
+```sql
+-- 1. PostgreSQL mulai transaction
+BEGIN;
+
+-- 2. Delete dari auth.users (triggered by Supabase Admin API)
+DELETE FROM auth.users WHERE id = 'user-uuid';
+
+-- 3. PostgreSQL AUTOMATICALLY cascade ke tabel dengan ON DELETE CASCADE:
+
+-- 3a. Delete dari profiles
+DELETE FROM public.profiles WHERE user_id = 'user-uuid';
+
+-- 3b. Delete dari user_roles  
+DELETE FROM public.user_roles WHERE user_id = 'user-uuid';
+
+-- 3c. Delete dari attendance_records
+DELETE FROM public.attendance_records WHERE user_id = 'user-uuid';
+
+-- 3d. Delete dari leave_requests (yang user_id = deleted user)
+DELETE FROM public.leave_requests WHERE user_id = 'user-uuid';
+
+-- 4. Commit transaction
+COMMIT;
+```
+
+### Potential Issue: reviewed_by Foreign Key
+
+```sql
+-- leave_requests.reviewed_by mereferensi auth.users TANPA CASCADE
+FOREIGN KEY (reviewed_by) REFERENCES auth.users(id)
+-- Default behavior: NO ACTION
+
+-- Artinya: Jika admin yang me-review leave request dihapus,
+-- akan terjadi FOREIGN KEY VIOLATION jika masih ada leave_requests
+-- dengan reviewed_by = admin tersebut
+```
+
+**Solusi jika terjadi error:**
+```sql
+-- Option 1: Set NULL sebelum delete (manual)
+UPDATE public.leave_requests 
+SET reviewed_by = NULL 
+WHERE reviewed_by = 'admin-uuid-to-delete';
+
+-- Option 2: Alter FK menjadi ON DELETE SET NULL
+ALTER TABLE public.leave_requests 
+DROP CONSTRAINT leave_requests_reviewed_by_fkey;
+
+ALTER TABLE public.leave_requests
+ADD CONSTRAINT leave_requests_reviewed_by_fkey
+FOREIGN KEY (reviewed_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+```
 
 ---
 
