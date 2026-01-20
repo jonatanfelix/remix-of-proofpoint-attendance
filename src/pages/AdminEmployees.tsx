@@ -352,7 +352,8 @@ const AdminEmployees = () => {
       if (data.error) throw new Error(data.error);
 
       toast.success(`User "${userName}" berhasil dihapus`, { id: toastId });
-      queryClient.invalidateQueries({ queryKey: ['admin-employees'] });
+      // Force immediate refetch to update UI
+      await queryClient.refetchQueries({ queryKey: ['admin-employees'] });
     } catch (error: any) {
       console.error('Delete user error:', error);
       toast.error(error.message || 'Gagal menghapus user', { id: toastId });
