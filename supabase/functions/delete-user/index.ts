@@ -59,10 +59,25 @@ Deno.serve(async (req) => {
         }
 
         // Get body
-        const { userId } = await req.json();
+        const body = await req.json();
+        const userId = body.userId;
+        
+        console.log('Received body:', JSON.stringify(body));
+        console.log('UserId to delete:', userId);
+        
         if (!userId) {
             return new Response(
                 JSON.stringify({ error: 'User ID is required' }),
+                { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+        }
+
+        // Validate UUID format
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(userId)) {
+            console.error('Invalid UUID format:', userId);
+            return new Response(
+                JSON.stringify({ error: 'Invalid User ID format. Expected UUID.' }),
                 { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             );
         }
