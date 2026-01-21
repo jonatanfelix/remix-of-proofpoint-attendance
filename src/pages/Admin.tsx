@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { downloadBlob } from '@/lib/download';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -303,7 +304,10 @@ const Admin = () => {
         p_user_agent: navigator.userAgent,
       });
       
-      XLSX.writeFile(wb, `${fileName}.xlsx`);
+      // Use downloadBlob for better browser compatibility (fixes UUID filename issue)
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      downloadBlob(blob, `${fileName}.xlsx`);
       toast.success(`Data diekspor: ${fileName}.xlsx`);
     } catch (error) {
       console.error('Export error:', error);
